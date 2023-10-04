@@ -75,7 +75,7 @@ int main(int argc, const char *argv[])
     {
 
         auto &matchings = json_result.values["matchings"].get<json::Array>();
-        auto &firstMatch = routes.values.at(0).get<json::Object>();
+        auto &firstMatch = matchings.values.at(0).get<json::Object>();
         auto &geometry = firstMatch.values["geometry"].get<json::Object>();
 
 
