@@ -117,6 +117,12 @@ cmake --build .
 sudo cmake --build . --target install
 ```
 
+Compile and install osrm-realtime
+```
+cd osrm-realtime
+./install.sh
+```
+
 ### Request Against the Demo Server
 
 Read the [API usage policy](https://github.com/Project-OSRM/osrm-backend/wiki/Demo-server).
