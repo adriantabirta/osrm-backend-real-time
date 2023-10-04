@@ -1,0 +1,11 @@
+#!/bin/sh
+
+# # Build
+cd build
+cmake ..
+cmake --build .
+
+# Install binaries
+
+sudo install ./osrm-realtime-routing /usr/bin/
+sudo install ./osrm-match /usr/bin/

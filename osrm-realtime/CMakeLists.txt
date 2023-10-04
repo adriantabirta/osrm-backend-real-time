@@ -10,7 +10,7 @@ if(NOT CMAKE_BUILD_TYPE MATCHES Debug)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-project(osrm-example C CXX)
+project(osrm-real-time-routing C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -25,10 +25,13 @@ else()
 endif()
 
 link_directories(${LibOSRM_LIBRARY_DIRS})
-add_executable(osrm-example example.cpp)
+add_executable(osrm-realtime-routing osrm-realtime-routing.cpp)
+add_executable(osrm-match osrm-match.cpp)
 
 find_package(LibOSRM REQUIRED)
 
-target_link_libraries(osrm-example ${LibOSRM_LIBRARIES} ${LibOSRM_DEPENDENT_LIBRARIES})
+target_link_libraries(osrm-realtime-routing ${LibOSRM_LIBRARIES} ${LibOSRM_DEPENDENT_LIBRARIES})
+target_link_libraries(osrm-match ${LibOSRM_LIBRARIES} ${LibOSRM_DEPENDENT_LIBRARIES})
+
 include_directories(SYSTEM ${LibOSRM_INCLUDE_DIRS})
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${LibOSRM_CXXFLAGS}")
