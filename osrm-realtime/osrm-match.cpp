@@ -31,18 +31,18 @@ int main(int argc, const char *argv[])
     const std::string magenta("\033[0;35m");
     const std::string reset("\033[0m");
 
-    if (argc < 5)
+    if (argc < 6)
     {
         std::cerr << red
-                  << "Call with at least 4 initial parameters (2 coordinates). ex: $ "
-                     "osrm-realtime-routing lat1 long1 lat2 long2"
+                  << "Call with at least 5 initial parameters (*.osrm, 2 coordinates). ex: $ "
+                     "osrm-realtime-routing *.osrm lat1 long1 lat2 long2"
                   << reset << std::endl;
         return EXIT_FAILURE;
     }
 
     MatchParameters params;
 
-    for (int i = 1; i < argc; i += 2)
+    for (int i = 2; i < argc; i += 2)
     {
         params.coordinates.push_back({util::FloatLongitude{std::stof(argv[i])},
                                       util::FloatLatitude{std::stof(argv[i + 1])}});
@@ -52,7 +52,7 @@ int main(int argc, const char *argv[])
 
     EngineConfig config;
 
-    config.storage_config = {"data/moldova-latest.osrm"};
+    config.storage_config = {argv[1]}; // {"data/moldova-latest.osrm"};
     config.use_shared_memory = false;
     config.algorithm = EngineConfig::Algorithm::MLD;
 
@@ -77,7 +77,6 @@ int main(int argc, const char *argv[])
         auto &matchings = json_result.values["matchings"].get<json::Array>();
         auto &firstMatch = matchings.values.at(0).get<json::Object>();
         auto &geometry = firstMatch.values["geometry"].get<json::Object>();
-
 
         auto &coordinates = geometry.values["coordinates"].get<json::Array>();
 

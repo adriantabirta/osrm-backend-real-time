@@ -31,30 +31,21 @@ int main(int argc, const char *argv[])
     const std::string magenta("\033[0;35m");
     const std::string reset("\033[0m");
 
-    EngineConfig config;
-
-    config.storage_config = {"data/moldova-latest.osrm"};
-    config.use_shared_memory = false;
-    config.algorithm = EngineConfig::Algorithm::MLD;
-
-    const OSRM osrm{config};
-
-    RouteParameters params;
-    params.steps = true;
-    params.geometries = RouteParameters::GeometriesType::GeoJSON;
-    params.overview = RouteParameters::OverviewType::Full;
-    params.annotations = true;
-
-    if (argc < 5)
+    if (argc < 6)
     {
         std::cerr << red
-                  << "Call with at least 4 initial parameters (2 coordinates). ex: $ "
-                     "osrm-realtime-routing lat1 long1 lat2 long2"
+                  << "Call with at least 5 initial parameters (*.osrm, 2 coordinates). ex: $ "
+                     "osrm-realtime-routing *.osrm lat1 long1 lat2 long2"
                   << reset << std::endl;
         return EXIT_FAILURE;
     }
 
-    for (int i = 1; i < argc; i += 2)
+      const OSRM osrm{config};
+
+    RouteParameters params;
+
+    // start from 3 element where coordinates start
+    for (int i = 2; i < argc; i += 2)
     {
         // add  coordinates
         float index = i / 2;
@@ -62,6 +53,17 @@ int main(int argc, const char *argv[])
                                       util::FloatLatitude{std::stof(argv[i + 1])}});
         // std::cout << index << " lat: " << argv[i] << " long: " << argv[i + 1] << std::endl;
     }
+
+    params.steps = true;
+    params.geometries = RouteParameters::GeometriesType::GeoJSON;
+    params.overview = RouteParameters::OverviewType::Full;
+    params.annotations = true;
+
+    EngineConfig config;
+
+    config.storage_config = {argv[1]}; // {"data/moldova-latest.osrm"};
+    config.use_shared_memory = false;
+    config.algorithm = EngineConfig::Algorithm::MLD;
 
     engine::api::ResultT result = json::Object();
     const auto status = osrm.Route(params, result);
