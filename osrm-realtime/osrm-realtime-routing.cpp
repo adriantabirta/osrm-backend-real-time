@@ -40,8 +40,6 @@ int main(int argc, const char *argv[])
         return EXIT_FAILURE;
     }
 
-      const OSRM osrm{config};
-
     RouteParameters params;
 
     // start from 3 element where coordinates start
@@ -66,6 +64,8 @@ int main(int argc, const char *argv[])
     config.algorithm = EngineConfig::Algorithm::MLD;
 
     engine::api::ResultT result = json::Object();
+
+    const OSRM osrm{config};
     const auto status = osrm.Route(params, result);
 
     auto &json_result = result.get<json::Object>();
