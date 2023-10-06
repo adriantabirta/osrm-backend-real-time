@@ -21,22 +21,13 @@
 
 int main(int argc, const char *argv[])
 {
-
     using namespace osrm;
-
-    const std::string red("\033[0;31m");
-    const std::string green("\033[1;32m");
-    const std::string yellow("\033[1;33m");
-    const std::string cyan("\033[0;36m");
-    const std::string magenta("\033[0;35m");
-    const std::string reset("\033[0m");
 
     if (argc < 6)
     {
-        std::cerr << red
-                  << "Call with at least 5 initial parameters (*.osrm, 2 coordinates). ex: $ "
+        std::cerr << "Call with at least 5 initial parameters (*.osrm, 2 coordinates). ex: $ "
                      "osrm-realtime-routing *.osrm lat1 long1 lat2 long2"
-                  << reset << std::endl;
+                  << std::endl;
         return EXIT_FAILURE;
     }
 
@@ -49,7 +40,6 @@ int main(int argc, const char *argv[])
         float index = i / 2;
         params.coordinates.push_back({util::FloatLongitude{std::stof(argv[i])},
                                       util::FloatLatitude{std::stof(argv[i + 1])}});
-        // std::cout << index << " lat: " << argv[i] << " long: " << argv[i + 1] << std::endl;
     }
 
     params.steps = true;
@@ -89,7 +79,6 @@ int main(int argc, const char *argv[])
         {
             auto &leg = legs.values.at(i).get<json::Object>();
             auto &steps = leg.values["steps"].get<json::Array>();
-            // std::cout << "nr of steps: " << steps.values.size() << std::endl;
 
             auto &annotation = leg.values["annotation"].get<json::Object>();
             auto &distances = annotation.values["distance"].get<json::Array>(); // in m
@@ -114,21 +103,21 @@ int main(int argc, const char *argv[])
                 auto &step = steps.values.at(j).get<json::Object>();
                 auto &geometry = step.values["geometry"].get<json::Object>();
                 auto &coordinates = geometry.values["coordinates"].get<json::Array>();
-                // std::cout << "coordinates count: " << coordinates.values.size() << std::endl;
+
                 for (int k = 0; k < coordinates.values.size(); k++)
                 {
                     auto &coordinate = coordinates.values.at(k).get<json::Array>();
-                    std::cout << yellow << coordinate.values.at(0).get<json::Number>().value << " "
-                              << coordinate.values.at(1).get<json::Number>().value << " " << reset;
+                    std::cout << coordinate.values.at(0).get<json::Number>().value << " "
+                              << coordinate.values.at(1).get<json::Number>().value << " ";
                 }
             }
         }
 
         std::cout << "" << std::endl;
-        std::cout << green << ratesString << reset << std::endl;
-        std::cout << cyan << speedsString << reset << std::endl;
-        std::cout << red << totalDistance << reset << std::endl;
-        std::cout << magenta << totalDuration << reset << std::endl;
+        std::cout << ratesString << std::endl;
+        std::cout << speedsString << std::endl;
+        std::cout << totalDistance << std::endl;
+        std::cout << totalDuration << std::endl;
 
         return EXIT_SUCCESS;
     }

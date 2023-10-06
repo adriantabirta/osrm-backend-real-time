@@ -24,19 +24,11 @@ int main(int argc, const char *argv[])
 
     using namespace osrm;
 
-    const std::string red("\033[0;31m");
-    const std::string green("\033[1;32m");
-    const std::string yellow("\033[1;33m");
-    const std::string cyan("\033[0;36m");
-    const std::string magenta("\033[0;35m");
-    const std::string reset("\033[0m");
-
     if (argc < 6)
     {
-        std::cerr << red
-                  << "Call with at least 5 initial parameters (*.osrm, 2 coordinates). ex: $ "
+        std::cerr << "Call with at least 5 initial parameters (*.osrm, 2 coordinates). ex: $ "
                      "osrm-realtime-routing *.osrm lat1 long1 lat2 long2"
-                  << reset << std::endl;
+                  << std::endl;
         return EXIT_FAILURE;
     }
 
@@ -83,8 +75,8 @@ int main(int argc, const char *argv[])
         for (int i = 0; i < coordinates.values.size(); i++)
         {
             auto &coordinate = coordinates.values.at(i).get<json::Array>();
-            std::cout << yellow << coordinate.values.at(0).get<json::Number>().value << " "
-                      << coordinate.values.at(1).get<json::Number>().value << " " << reset;
+            std::cout << coordinate.values.at(0).get<json::Number>().value << " "
+                      << coordinate.values.at(1).get<json::Number>().value << " ";
         }
 
         auto &legs = firstMatch.values["legs"].get<json::Array>();
@@ -105,7 +97,7 @@ int main(int argc, const char *argv[])
         }
 
         std::cout << "" << std::endl;
-        std::cout << green << nodeIds << reset << std::endl;
+        std::cout << nodeIds << std::endl;
 
         return EXIT_SUCCESS;
     }
