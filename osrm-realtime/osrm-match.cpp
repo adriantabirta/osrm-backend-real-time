@@ -44,7 +44,7 @@ int main(int argc, const char *argv[])
 
     EngineConfig config;
 
-    config.storage_config = {argv[1]}; // {"data/moldova-latest.osrm"};
+    config.storage_config = {argv[1]};
     config.use_shared_memory = false;
     config.algorithm = EngineConfig::Algorithm::MLD;
 
@@ -52,7 +52,7 @@ int main(int argc, const char *argv[])
     params.geometries = RouteParameters::GeometriesType::GeoJSON;
     params.overview = RouteParameters::OverviewType::Full;
     params.annotations = true;
-    params.annotations = true;
+    params.annotations_type = RouteParameters::AnnotationsType::Nodes;
 
     engine::api::ResultT result = json::Object();
 

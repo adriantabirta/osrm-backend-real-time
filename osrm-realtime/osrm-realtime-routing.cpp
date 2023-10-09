@@ -49,7 +49,7 @@ int main(int argc, const char *argv[])
 
     EngineConfig config;
 
-    config.storage_config = {argv[1]}; // {"data/moldova-latest.osrm"};
+    config.storage_config = {argv[1]};
     config.use_shared_memory = false;
     config.algorithm = EngineConfig::Algorithm::MLD;
 
@@ -60,6 +60,7 @@ int main(int argc, const char *argv[])
 
     auto &json_result = result.get<json::Object>();
 
+    std::string nodesString;
     std::string ratesString;
     std::string speedsString;
 
@@ -83,6 +84,19 @@ int main(int argc, const char *argv[])
             auto &annotation = leg.values["annotation"].get<json::Object>();
             auto &distances = annotation.values["distance"].get<json::Array>(); // in m
             auto &speeds = annotation.values["speed"].get<json::Array>();       // in km/h
+
+            auto &nodes = annotation.values["nodes"].get<json::Array>();
+
+            for (int n = 0; n < nodes.values.size() - 1; n++) // iterate until n-1
+            {
+                const auto node1 = nodes.values.at(n).get<json::Number>().value;
+                const auto node2 = nodes.values.at(n+1).get<json::Number>().value;
+
+                const auto speed1 = speeds.values.at(n).get<json::Number>().value;
+                const auto speed2 = speeds.values.at(n+1).get<json::Number>().value;
+
+                nodesString.append(std::to_string(node1) + " " + std::to_string(node2) + " " + std::to_string((speed1 + speed2) / 2));
+            }
 
             for (int d = 0; d < distances.values.size(); d++)
             {
@@ -114,6 +128,7 @@ int main(int argc, const char *argv[])
         }
 
         std::cout << "" << std::endl;
+        std::cout << nodesString << std::endl;
         std::cout << ratesString << std::endl;
         std::cout << speedsString << std::endl;
         std::cout << totalDistance << std::endl;
