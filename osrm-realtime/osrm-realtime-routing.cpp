@@ -90,7 +90,7 @@ int main(int argc, const char *argv[])
                 const auto node1 = nodes.values.at(n).get<json::Number>().value;
                 const auto node2 = nodes.values.at(n+1).get<json::Number>().value;
                 const auto speed1 = speeds.values.at(n).get<json::Number>().value;
-                nodesString.append(std::to_string(node1) + " " + std::to_string(node2) + " " + std::to_string(speed1) + " ";
+                nodesString.append(std::to_string(node1) + " " + std::to_string(node2) + " " + std::to_string(speed1) + " ");
             }
 
             for (int d = 0; d < distances.values.size(); d++)
