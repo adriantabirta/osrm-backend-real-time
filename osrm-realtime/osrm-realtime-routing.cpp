@@ -36,8 +36,6 @@ int main(int argc, const char *argv[])
     // start from 3 element where coordinates start
     for (int i = 2; i < argc; i += 2)
     {
-        // add  coordinates
-        float index = i / 2;
         params.coordinates.push_back({util::FloatLongitude{std::stof(argv[i])},
                                       util::FloatLatitude{std::stof(argv[i + 1])}});
     }
@@ -91,11 +89,8 @@ int main(int argc, const char *argv[])
             {
                 const auto node1 = nodes.values.at(n).get<json::Number>().value;
                 const auto node2 = nodes.values.at(n+1).get<json::Number>().value;
-
                 const auto speed1 = speeds.values.at(n).get<json::Number>().value;
-                const auto speed2 = speeds.values.at(n+1).get<json::Number>().value;
-
-                nodesString.append(std::to_string(node1) + " " + std::to_string(node2) + " " + std::to_string((speed1 + speed2) / 2));
+                nodesString.append(std::to_string(node1) + " " + std::to_string(node2) + " " + std::to_string(speed1) + " ";
             }
 
             for (int d = 0; d < distances.values.size(); d++)
