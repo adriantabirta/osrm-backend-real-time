@@ -27,11 +27,13 @@ endif()
 link_directories(${LibOSRM_LIBRARY_DIRS})
 add_executable(osrm-realtime-routing osrm-realtime-routing.cpp)
 add_executable(osrm-nearest osrm-nearest.cpp)
+add_executable(osrm-match osrm-match.cpp)
 
 find_package(LibOSRM REQUIRED)
 
 target_link_libraries(osrm-realtime-routing ${LibOSRM_LIBRARIES} ${LibOSRM_DEPENDENT_LIBRARIES})
 target_link_libraries(osrm-nearest ${LibOSRM_LIBRARIES} ${LibOSRM_DEPENDENT_LIBRARIES})
+target_link_libraries(osrm-match ${LibOSRM_LIBRARIES} ${LibOSRM_DEPENDENT_LIBRARIES})
 
 include_directories(SYSTEM ${LibOSRM_INCLUDE_DIRS})
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${LibOSRM_CXXFLAGS}")
