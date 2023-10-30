@@ -26,7 +26,7 @@ int main(int argc, const char *argv[])
     if (argc < 6)
     {
         std::cerr << "Call with at least 5 initial parameters (*.osrm, 2 coordinates). ex: $ "
-                     "osrm-realtime-match *.osrm lat1 long1 lat2 long2"
+                     "osrm-match *.osrm lat1 long1 lat2 long2"
                   << std::endl;
         return EXIT_FAILURE;
     }
