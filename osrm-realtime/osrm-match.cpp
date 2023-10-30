@@ -66,11 +66,6 @@ int main(int argc, const char *argv[])
     {
         // std::cout << "Status::OK -> before return result" << std::endl;
 
-        // http://router.project-osrm.org/match/v1/driving/-77.044211,38.852924;-77.045659,38.860158;-77.044232,38.862326?annotations=true&steps=true&overview=full&geometries=geojson
-
-        // .matchings
-        // .tracepoints[].location[2]
-
         auto &matchings = json_result.values["matchings"].get<json::Array>();
         auto &match = matchings.values.at(0).get<json::Object>();
 

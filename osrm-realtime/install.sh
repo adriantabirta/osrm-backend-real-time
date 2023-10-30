@@ -11,3 +11,4 @@ cmake --build .
 
 sudo install ./osrm-realtime-routing /usr/bin/
 sudo install ./osrm-nearest /usr/bin/
+sudo install ./osrm-match /usr/bin/
