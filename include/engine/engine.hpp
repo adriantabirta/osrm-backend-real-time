@@ -77,7 +77,10 @@ template <typename Algorithm> class Engine final : public EngineInterface
             util::Log(logDEBUG) << "Using internal memory with algorithm "
                                 << routing_algorithms::name<Algorithm>();
             facade_provider = std::make_unique<ImmutableProvider<Algorithm>>(config.storage_config);
-        }
+        } 
+	else if (config.use_live_data) {
+	    facade_provider = std::make_unique<ImmutableProvider datafacade::LiveWeightedDataFacade<algorithm::Algorithm>>>(config);
+	}
     }
 
     Engine(Engine &&) noexcept = delete;

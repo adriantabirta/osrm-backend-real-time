@@ -139,6 +139,7 @@ class OSRM final
 
   private:
     std::unique_ptr<engine::EngineInterface> engine_;
+    std::unique_ptr<engine::TrafficUpdater> traffic_updater_;
 };
 } // namespace osrm
 

@@ -54,7 +54,18 @@ OSRM::OSRM(engine::EngineConfig &config)
     default:
         throw util::exception("Algorithm not implemented!");
     }
+
+    if (config.use_live_data) {
+        traffic_updater_ = std::make_unique<engine::TrafficUpdater>(
+        config.live_data_udp_port,
+        config.live_data_stale_seconds
+        );
+
+ 	traffic_updater_->start();
+	util::Log() << "TrafficUpdater pornit pe UDP port " << config.live_data_udp_port;
+    }
 }
+
 OSRM::~OSRM() = default;
 OSRM::OSRM(OSRM &&) noexcept = default;
 OSRM &OSRM::operator=(OSRM &&) noexcept = default;

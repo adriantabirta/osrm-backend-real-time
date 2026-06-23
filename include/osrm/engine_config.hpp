@@ -26,6 +26,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 #ifndef GLOBAL_ENGINE_CONFIG_HPP
+bool use_live_data = false;  // flag nou
 #define GLOBAL_ENGINE_CONFIG_HPP
 
 #include "engine/engine_config.hpp"

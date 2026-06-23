@@ -35,6 +35,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <set>
 #include <string>
+#include <cstdint>          // ★ NOU — pentru uint16_t
 
 namespace osrm::engine
 {
@@ -94,6 +95,21 @@ struct EngineConfig final
     std::vector<storage::FeatureDataset> disable_feature_dataset;
     std::string verbosity;
     std::string dataset_name;
+
+     // ─── câmpuri noi pentru live traffic ★ ───────────────────────────────
+
+    // Activează injectarea de date live în rutare
+    bool use_live_data = false;
+
+    // Portul UDP pe care TrafficUpdater ascultă pachete GPS/traffic
+    uint16_t live_data_udp_port = 9000;
+
+    // Câte secunde un edge fără update e considerat "stale" și ignorat
+    int live_data_stale_seconds = 120;
+
+    // Threshold sub care nu modificăm weight-ul (evităm noise)
+    double live_data_min_speed_kmh = 1.0;
+
 };
 } // namespace osrm::engine
 
