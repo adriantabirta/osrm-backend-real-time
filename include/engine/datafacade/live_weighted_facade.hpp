@@ -3,7 +3,19 @@
 #include "engine/datafacade/contiguous_internalmem_datafacade.hpp"
 #include "engine/live_data_store.hpp"
 
+#include <memory>
+#include <unordered_map>
+#include <shared_mutex>
+
+#include <boost/range.hpp>
+
 namespace osrm::engine::datafacade {
+
+// Helper class to create boost ranges from vectors
+template <typename T>
+auto make_iterator_range(const std::vector<T>& vec) {
+    return boost::iterator_range<typename std::vector<T>::const_iterator>(vec.begin(), vec.end());
+}
 
 template <typename AlgorithmT>
 class LiveWeightedDataFacade 
@@ -11,67 +23,86 @@ class LiveWeightedDataFacade
 {
     using Base = ContiguousInternalMemoryDataFacade<AlgorithmT>;
 
+    // Re-declare types from base for use in this class
+    using EdgeWeight = extractor::SegmentDataView::SegmentWeightVector::value_type;
+    using PackedGeometryID = std::uint32_t;
+    using WeightVector = std::vector<EdgeWeight>;
+
+    // Mutable cache for modified weights
+    mutable std::unordered_map<PackedGeometryID, std::shared_ptr<WeightVector>> forward_cache;
+    mutable std::unordered_map<PackedGeometryID, std::shared_ptr<WeightVector>> reverse_cache;
+    mutable std::shared_mutex cache_mutex;
+
 public:
     // Preia același constructor ca baza
     using Base::Base;
 
     // Suprascrie weights forward per segment
     // Aceasta e metoda apelată de algoritmul de rutare pentru fiecare segment
-    WeightForwardRange GetUncompressedForwardWeights(
-        const GeometryID id) const override
+    typename Base::WeightForwardRange GetUncompressedForwardWeights(
+        const PackedGeometryID id) const override
     {
         // Ia weights-urile statice din bază
         auto base_weights = Base::GetUncompressedForwardWeights(id);
 
         // Dacă avem date live pentru edge-ul curent, le aplicăm
-        // EdgeID-ul îl calculăm din GeometryID
-        auto live = LiveDataStore::instance().get(
-            static_cast<std::uint64_t>(id.id)
-        );
+        auto live = LiveDataStore::instance().get(static_cast<std::uint64_t>(id));
 
-        if (live && live->source != "static") {
-            // Returnăm un range modificat
-            // (implementare simplă — vezi nota de mai jos)
-            modified_weights_cache_[id.id] = applyFactor(base_weights, live->weight_factor);
-            return rangeOf(modified_weights_cache_[id.id]);
+        if (live && live->source == "live") {
+            std::shared_lock read_lock(cache_mutex);
+            auto it = forward_cache.find(id);
+            if (it != forward_cache.end()) {
+                return make_iterator_range(*it->second);
+            }
+            read_lock.unlock();
+
+            // Create modified weights
+            auto modified = std::make_shared<WeightVector>();
+            modified->reserve(base_weights.size());
+            for (auto w : base_weights) {
+                // Multiply the weight by the factor
+                modified->push_back(w * live->weight_factor);
+            }
+
+            // Store in cache
+            std::unique_lock write_lock(cache_mutex);
+            forward_cache[id] = modified;
+            return make_iterator_range(*modified);
         }
 
         return base_weights;
     }
 
     // La fel pentru reverse (dacă folosești rute bidirecționale)
-    WeightReverseRange GetUncompressedReverseWeights(
-        const GeometryID id) const override
+    typename Base::WeightReverseRange GetUncompressedReverseWeights(
+        const PackedGeometryID id) const override
     {
-        auto live = LiveDataStore::instance().get(
-            static_cast<std::uint64_t>(id.id)
-        );
-        
         auto base_weights = Base::GetUncompressedReverseWeights(id);
-        
-        if (live && live->source != "static") {
-            modified_weights_rev_cache_[id.id] = applyFactor(base_weights, live->weight_factor);
-            return reverseRangeOf(modified_weights_rev_cache_[id.id]);
+        auto live = LiveDataStore::instance().get(static_cast<std::uint64_t>(id));
+
+        if (live && live->source == "live") {
+            std::shared_lock read_lock(cache_mutex);
+            auto it = reverse_cache.find(id);
+            if (it != reverse_cache.end()) {
+                return boost::reversed_range<const typename Base::WeightForwardRange>(make_iterator_range(*it->second));
+            }
+            read_lock.unlock();
+
+            // Create modified weights
+            auto modified = std::make_shared<WeightVector>();
+            modified->reserve(base_weights.size());
+            for (auto w : base_weights) {
+                // Multiply the weight by the factor
+                modified->push_back(w * live->weight_factor);
+            }
+
+            // Store in cache
+            std::unique_lock write_lock(cache_mutex);
+            reverse_cache[id] = modified;
+            return boost::reversed_range<const typename Base::WeightForwardRange>(make_iterator_range(*modified));
         }
-        
+
         return base_weights;
-    }
-
-private:
-    // cache per cerere — se resetează la fiecare request nou
-    mutable std::unordered_map<unsigned, std::vector<EdgeWeight>> modified_weights_cache_;
-    mutable std::unordered_map<unsigned, std::vector<EdgeWeight>> modified_weights_rev_cache_;
-
-    template <typename Range>
-    std::vector<EdgeWeight> applyFactor(const Range& range, double factor) const {
-        std::vector<EdgeWeight> result;
-        result.reserve(std::distance(range.begin(), range.end()));
-        for (auto w : range) {
-            result.push_back(static_cast<EdgeWeight>(
-                static_cast<double>(w) * factor
-            ));
-        }
-        return result;
     }
 };
 

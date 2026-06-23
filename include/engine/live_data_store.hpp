@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <string>
 #include <chrono>
+#include <mutex>
 
 namespace osrm::engine {
 

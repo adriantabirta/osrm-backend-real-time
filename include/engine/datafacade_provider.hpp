@@ -10,10 +10,23 @@
 
 namespace osrm::engine
 {
+namespace datafacade
+{
+    template <typename AlgorithmT>
+    class LiveWeightedDataFacade;
+}
 namespace detail
 {
 
+// Base class for all providers - type erased interface
+class DataFacadeProviderInterface
+{
+  public:
+    virtual ~DataFacadeProviderInterface() = default;
+};
+
 template <typename AlgorithmT, template <typename A> class FacadeT> class DataFacadeProvider
+    : public DataFacadeProviderInterface
 {
   public:
     using Facade = FacadeT<AlgorithmT>;
@@ -101,6 +114,11 @@ template <typename AlgorithmT>
 using ImmutableProvider = detail::ImmutableProvider<AlgorithmT, DataFacade>;
 template <typename AlgorithmT>
 using ExternalProvider = detail::ExternalProvider<AlgorithmT, DataFacade>;
+
+template <typename AlgorithmT>
+using LiveWeightedExternalProvider = detail::ExternalProvider<AlgorithmT, datafacade::LiveWeightedDataFacade>;
+template <typename AlgorithmT>
+using LiveWeightedImmutableProvider = detail::ImmutableProvider<AlgorithmT, datafacade::LiveWeightedDataFacade>;
 } // namespace osrm::engine
 
 #endif

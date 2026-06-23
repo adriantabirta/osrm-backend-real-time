@@ -187,7 +187,19 @@ inline unsigned generateServerProgramOptions(const int argc,
          "Max. radius size supported in map matching query. Default: unlimited.") //
         ("default-radius",
          value<boost::optional<double>>(&config.default_radius)->default_value(-1.0),
-         "Default radius size for queries. Default: unlimited.");
+         "Default radius size for queries. Default: unlimited.") //
+        ("enable-live-data",
+         boost::program_options::bool_switch(&config.use_live_data)->default_value(false),
+         "Enable real-time traffic data via UDP") //
+        ("live-data-udp-port",
+         value<uint16_t>(&config.live_data_udp_port)->default_value(9000),
+         "UDP port for receiving live traffic data") //
+        ("live-data-stale-seconds",
+         value<int>(&config.live_data_stale_seconds)->default_value(120),
+         "Seconds to keep live traffic data without updates") //
+        ("live-data-min-speed",
+         value<double>(&config.live_data_min_speed_kmh)->default_value(1.0),
+         "Minimum speed in km/h for live traffic validation");
 
     // hidden options, will be allowed on command line, but will not be shown to the user
     boost::program_options::options_description hidden_options("Hidden options");

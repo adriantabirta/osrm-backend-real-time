@@ -29,6 +29,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define OSRM_HPP
 
 #include "engine/api/base_result.hpp"
+#include "engine/traffic_updater.hpp"
 #include "osrm/osrm_fwd.hpp"
 #include "osrm/status.hpp"
 

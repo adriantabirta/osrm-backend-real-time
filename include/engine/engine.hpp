@@ -8,6 +8,7 @@
 #include "engine/api/tile_parameters.hpp"
 #include "engine/api/trip_parameters.hpp"
 #include "engine/datafacade_provider.hpp"
+#include "engine/datafacade/live_weighted_facade.hpp"
 #include "engine/engine_config.hpp"
 #include "engine/plugins/match.hpp"
 #include "engine/plugins/nearest.hpp"
@@ -55,7 +56,34 @@ template <typename Algorithm> class Engine final : public EngineInterface
           tile_plugin()                        //
 
     {
-        if (config.use_shared_memory)
+        if (config.use_live_data)
+        {
+            if (config.use_shared_memory)
+            {
+                util::Log(logWARNING)
+                    << "use_live_data is enabled; shared memory is not supported for live updates. "
+                       "Falling back to live-weighted internal/mmap facade.";
+            }
+
+            if (!config.memory_file.empty() || config.use_mmap)
+            {
+                if (!config.memory_file.empty())
+                {
+                    util::Log(logWARNING)
+                        << "The 'memory_file' option is DEPRECATED - using direct mmaping instead";
+                }
+                util::Log(logDEBUG) << "Using direct memory mapping with live weighted data and algorithm "
+                                    << routing_algorithms::name<Algorithm>();
+                facade_provider = std::make_unique<ExternalProvider<Algorithm>>(config.storage_config);
+            }
+            else
+            {
+                util::Log(logDEBUG) << "Using internal memory with live weighted data and algorithm "
+                                    << routing_algorithms::name<Algorithm>();
+                facade_provider = std::make_unique<ImmutableProvider<Algorithm>>(config.storage_config);
+            }
+        }
+        else if (config.use_shared_memory)
         {
             util::Log(logDEBUG) << "Using shared memory with name \"" << config.dataset_name
                                 << "\" with algorithm " << routing_algorithms::name<Algorithm>();
@@ -77,10 +105,7 @@ template <typename Algorithm> class Engine final : public EngineInterface
             util::Log(logDEBUG) << "Using internal memory with algorithm "
                                 << routing_algorithms::name<Algorithm>();
             facade_provider = std::make_unique<ImmutableProvider<Algorithm>>(config.storage_config);
-        } 
-	else if (config.use_live_data) {
-	    facade_provider = std::make_unique<ImmutableProvider datafacade::LiveWeightedDataFacade<algorithm::Algorithm>>>(config);
-	}
+        }
     }
 
     Engine(Engine &&) noexcept = delete;

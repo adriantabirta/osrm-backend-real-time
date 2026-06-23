@@ -37,9 +37,10 @@ static_assert(sizeof(TrafficPacket) == 40,
 // ─── TrafficUpdater ──────────────────────────────────────────────────────────
 class TrafficUpdater {
 public:
-    explicit TrafficUpdater(uint16_t port = 9000, int stale_seconds = 120)
+    explicit TrafficUpdater(uint16_t port = 9000, int stale_seconds = 120, float min_speed_kmh = 1.0f)
         : port_(port)
         , stale_seconds_(stale_seconds)
+        , min_speed_kmh_(min_speed_kmh)
         , sockfd_(-1)
         , running_(false)
     {}
@@ -83,7 +84,9 @@ private:
         ::setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf));
 
         // Timeout pe recv — ca să putem ieși din loop la stop()
-        struct timeval tv { .tv_sec = 1, .tv_usec = 0 };
+        struct timeval tv;
+        tv.tv_sec = 1;
+        tv.tv_usec = 0;
         ::setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
         sockaddr_in addr{};
@@ -132,7 +135,7 @@ private:
 
     void processPacket(const TrafficPacket& pkt) {
         // Validări de bază
-        if (pkt.speed_kmh < 0.0f || pkt.speed_kmh > 300.0f) return;
+        if (pkt.speed_kmh < min_speed_kmh_ || pkt.speed_kmh > 300.0f) return;
         if (pkt.latitude  < -90.0 || pkt.latitude  > 90.0)  return;
         if (pkt.longitude < -180.0|| pkt.longitude > 180.0) return;
 
@@ -174,6 +177,7 @@ private:
 
     uint16_t          port_;
     int               stale_seconds_;
+    float             min_speed_kmh_;
     int               sockfd_;
     std::atomic<bool> running_;
     std::thread       thread_;

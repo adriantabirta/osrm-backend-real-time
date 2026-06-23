@@ -57,8 +57,9 @@ OSRM::OSRM(engine::EngineConfig &config)
 
     if (config.use_live_data) {
         traffic_updater_ = std::make_unique<engine::TrafficUpdater>(
-        config.live_data_udp_port,
-        config.live_data_stale_seconds
+            config.live_data_udp_port,
+            config.live_data_stale_seconds,
+            static_cast<float>(config.live_data_min_speed_kmh)
         );
 
  	traffic_updater_->start();
