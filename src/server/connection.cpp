@@ -6,6 +6,9 @@
 #include <boost/bind.hpp>
 #include <boost/iostreams/filter/gzip.hpp>
 #include <boost/iostreams/filtering_stream.hpp>
+#include <boost/version.hpp>
+
+#include <chrono>
 
 #include <fmt/format.h>
 #include <vector>
@@ -28,7 +31,7 @@ void Connection::start()
 {
     TCP_socket.async_read_some(boost::asio::buffer(incoming_data_buffer),
                                boost::bind(&Connection::handle_read,
-                                           this->shared_from_this(),
+                                           self(),
                                            boost::asio::placeholders::error,
                                            boost::asio::placeholders::bytes_transferred));
 
@@ -36,9 +39,13 @@ void Connection::start()
     {
         // Ok, we know it is not a first request, as we switched to keepalive
         timer.cancel();
+#if BOOST_VERSION >= 107000
+        timer.expires_after(std::chrono::seconds(keepalive_timeout));
+#else
         timer.expires_from_now(boost::posix_time::seconds(keepalive_timeout));
+#endif
         timer.async_wait(std::bind(
-            &Connection::handle_timeout, this->shared_from_this(), std::placeholders::_1));
+            &Connection::handle_timeout, self(), std::placeholders::_1));
     }
 }
 
@@ -58,7 +65,11 @@ void Connection::handle_read(const boost::system::error_code &error, std::size_t
     if (keep_alive)
     {
         timer.cancel();
+#if BOOST_VERSION >= 107000
+        timer.expires_after(std::chrono::seconds(0));
+#else
         timer.expires_from_now(boost::posix_time::seconds(0));
+#endif
     }
 
     // no error detected, let's parse the request
@@ -127,7 +138,7 @@ void Connection::handle_read(const boost::system::error_code &error, std::size_t
         boost::asio::async_write(TCP_socket,
                                  output_buffer,
                                  boost::bind(&Connection::handle_write,
-                                             this->shared_from_this(),
+                                             self(),
                                              boost::asio::placeholders::error));
     }
     else if (result == RequestParser::RequestStatus::invalid)
@@ -137,7 +148,7 @@ void Connection::handle_read(const boost::system::error_code &error, std::size_t
         boost::asio::async_write(TCP_socket,
                                  current_reply.to_buffers(),
                                  boost::bind(&Connection::handle_write,
-                                             this->shared_from_this(),
+                                             self(),
                                              boost::asio::placeholders::error));
     }
     else
@@ -145,7 +156,7 @@ void Connection::handle_read(const boost::system::error_code &error, std::size_t
         // we don't have a result yet, so continue reading
         TCP_socket.async_read_some(boost::asio::buffer(incoming_data_buffer),
                                    boost::bind(&Connection::handle_read,
-                                               this->shared_from_this(),
+                                               self(),
                                                boost::asio::placeholders::error,
                                                boost::asio::placeholders::bytes_transferred));
     }

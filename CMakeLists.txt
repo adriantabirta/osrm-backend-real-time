@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.18)
 
+# Vendored deps may still declare cmake_minimum_required(< 3.5); CMake 4+ rejects that.
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "4.0")
+  set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -50,7 +55,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 # be compatible with version handling before cmake 3.x
 if (POLICY CMP0048)
-  cmake_policy(SET CMP0048 OLD)
+  cmake_policy(SET CMP0048 NEW)
 endif()
 if (POLICY CMP0057)
   cmake_policy(SET CMP0057 NEW)
@@ -69,18 +74,16 @@ else()
   set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-z,origin")
 endif()
 
-include(JSONParser)
-file(READ "package.json" packagejsonraw)
-sbeParseJson(packagejson packagejsonraw)
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" OSRM_VERSION_RAW)
+string(STRIP "${OSRM_VERSION_RAW}" OSRM_VERSION)
 
-if (packagejson.version MATCHES "^([0-9]+)\.([0-9]+)\.([0-9]+)")
+if (OSRM_VERSION MATCHES "^([0-9]+)\.([0-9]+)\.([0-9]+)")
     set(OSRM_VERSION_MAJOR ${CMAKE_MATCH_1})
     set(OSRM_VERSION_MINOR ${CMAKE_MATCH_2})
     set(OSRM_VERSION_PATCH ${CMAKE_MATCH_3})
-
     set(OSRM_VERSION "${OSRM_VERSION_MAJOR}.${OSRM_VERSION_MINOR}.${OSRM_VERSION_PATCH}")
 else()
-    message(FATAL_ERROR "Version from package.json cannot be parsed, expected semver compatible X.Y.Z, but found ${packagejson.version}")
+    message(FATAL_ERROR "VERSION file must start with semver X.Y.Z, got: ${OSRM_VERSION}")
 endif()
 
 if (MSVC)
@@ -124,6 +127,8 @@ include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/third_party/sol2-3.3.0/in
 include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/third_party/variant/include)
 
 set(BOOST_COMPONENTS date_time chrono filesystem iostreams program_options regex system thread unit_test_framework)
+# Boost >= 1.89 ships boost::system as header-only (no libboost_system)
+set(BOOST_FIND_COMPONENTS date_time chrono filesystem iostreams program_options regex thread unit_test_framework)
 
 configure_file(
   ${CMAKE_CURRENT_SOURCE_DIR}/include/util/version.hpp.in
@@ -163,6 +168,10 @@ add_executable(osrm-partition src/tools/partition.cpp)
 add_executable(osrm-customize src/tools/customize.cpp)
 add_executable(osrm-contract src/tools/contract.cpp)
 add_executable(osrm-datastore src/tools/store.cpp $<TARGET_OBJECTS:MICROTAR> $<TARGET_OBJECTS:UTIL>)
+add_executable(live_traffic_publisher src/tools/live_traffic_publisher.cpp)
+add_executable(test_udp_packet src/tools/test_udp_packet.cpp)
+target_compile_features(live_traffic_publisher PRIVATE cxx_std_17)
+target_compile_features(test_udp_packet PRIVATE cxx_std_17)
 add_library(osrm src/osrm/osrm.cpp $<TARGET_OBJECTS:ENGINE> $<TARGET_OBJECTS:STORAGE> $<TARGET_OBJECTS:MICROTAR> $<TARGET_OBJECTS:UTIL>)
 add_library(osrm_contract src/osrm/contractor.cpp $<TARGET_OBJECTS:CONTRACTOR> $<TARGET_OBJECTS:UTIL>)
 add_library(osrm_extract src/osrm/extractor.cpp $<TARGET_OBJECTS:EXTRACTOR> $<TARGET_OBJECTS:MICROTAR> $<TARGET_OBJECTS:UTIL>)
@@ -378,14 +387,23 @@ if(ENABLE_CONAN)
   add_dependency_includes(${CONAN_INCLUDE_DIRS_TBB})
 
   set(Boost_USE_STATIC_LIBS ON)
-  find_package(Boost REQUIRED COMPONENTS ${BOOST_COMPONENTS})
+  find_package(Boost REQUIRED COMPONENTS ${BOOST_FIND_COMPONENTS})
+  if(NOT TARGET Boost::system)
+    add_library(Boost::system INTERFACE IMPORTED)
+    set_target_properties(Boost::system PROPERTIES
+      INTERFACE_INCLUDE_DIRECTORIES "${Boost_INCLUDE_DIRS}")
+  endif()
   set(Boost_DATE_TIME_LIBRARY "${Boost_date_time_LIB_TARGETS}")
   set(Boost_CHRONO_LIBRARY "${Boost_chrono_LIB_TARGETS}")
   set(Boost_PROGRAM_OPTIONS_LIBRARY "${Boost_program_options_LIB_TARGETS}")
   set(Boost_FILESYSTEM_LIBRARY "${Boost_filesystem_LIB_TARGETS}")
   set(Boost_IOSTREAMS_LIBRARY "${Boost_iostreams_LIB_TARGETS}")
   set(Boost_THREAD_LIBRARY "${Boost_thread_LIB_TARGETS}")
-  set(Boost_SYSTEM_LIBRARY "${Boost_system_LIB_TARGETS}")
+  if(Boost_system_FOUND AND TARGET Boost::system)
+    set(Boost_SYSTEM_LIBRARY "${Boost_system_LIB_TARGETS}")
+  else()
+    set(Boost_SYSTEM_LIBRARY Boost::system)
+  endif()
   set(Boost_ZLIB_LIBRARY "${Boost_zlib_LIB_TARGETS}")
   set(Boost_REGEX_LIBRARY "${Boost_regex_LIB_TARGETS}")
   set(Boost_UNIT_TEST_FRAMEWORK_LIBRARY "${Boost_unit_test_framework_LIB_TARGETS}")
@@ -403,8 +421,16 @@ if(ENABLE_CONAN)
   # expat and bzip2 are used from conan rather than the system
   include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/third_party/libosmium/include)
 else()
-  find_package(Boost 1.70 REQUIRED COMPONENTS ${BOOST_COMPONENTS})
+  find_package(Boost 1.70 REQUIRED COMPONENTS ${BOOST_FIND_COMPONENTS})
   add_dependency_includes(${Boost_INCLUDE_DIRS})
+  if(NOT TARGET Boost::system)
+    add_library(Boost::system INTERFACE IMPORTED)
+    set_target_properties(Boost::system PROPERTIES
+      INTERFACE_INCLUDE_DIRECTORIES "${Boost_INCLUDE_DIRS}")
+  endif()
+  if(NOT Boost_SYSTEM_LIBRARY)
+    set(Boost_SYSTEM_LIBRARY Boost::system)
+  endif()
 
   find_package(TBB REQUIRED)
   add_dependency_includes(${TBB_INCLUDE_DIR})
@@ -687,7 +713,10 @@ JOIN("-I${DEPENDENCIES_INCLUDE_DIRS}" " -I" PKGCONFIG_OSRM_INCLUDE_FLAGS)
 # the link libraries to be written to the pkg-config file.
 # Conan & TBB define dependencies as CMake targets too, that's why we do the same for them.
 foreach(engine_lib ${ENGINE_LIBRARIES})
-  if("${engine_lib}" MATCHES "^Boost.*" OR "${engine_lib}" MATCHES "^CONAN_LIB.*" OR "${engine_lib}" MATCHES "^TBB.*")
+  if("${engine_lib}" STREQUAL "Boost::system")
+    # header-only since Boost 1.89 — no linker file for pkg-config
+    continue()
+  elseif("${engine_lib}" MATCHES "^Boost.*" OR "${engine_lib}" MATCHES "^CONAN_LIB.*" OR "${engine_lib}" MATCHES "^TBB.*")
     list(APPEND PKGCONFIG_DEPENDENT_LIBRARIES "$<TARGET_LINKER_FILE:${engine_lib}>")
   else()
     list(APPEND PKGCONFIG_DEPENDENT_LIBRARIES "${engine_lib}")
@@ -718,11 +747,6 @@ add_custom_target(uninstall
 add_subdirectory(unit_tests)
 add_subdirectory(src/benchmarks)
 
-if (ENABLE_NODE_BINDINGS)
-  add_subdirectory(src/nodejs)
-endif()
-
-
 if (ENABLE_FUZZING)
   # Requires libosrm being built with sanitizers; make configurable and default to ubsan
   set(FUZZ_SANITIZER "undefined" CACHE STRING "Sanitizer to be used for Fuzz testing")
@@ -743,10 +767,6 @@ file(GLOB_RECURSE headers_to_check
   ${PROJECT_BINARY_DIR}/*.hpp	
   ${PROJECT_SOURCE_DIR}/include/*.hpp)	
 foreach(header ${headers_to_check})	
-  if ("${header}" MATCHES ".*/include/nodejs/.*")
-    # we do not check NodeJS bindings headers
-    continue()
-  endif()
   get_filename_component(filename ${header} NAME_WE)	
   set(filename "${check_headers_dir}/${filename}.cpp")	
   if (NOT EXISTS ${filename})	

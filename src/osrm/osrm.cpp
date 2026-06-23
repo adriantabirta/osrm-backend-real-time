@@ -1,10 +1,11 @@
 #include "osrm/osrm.hpp"
 
-#include "engine/algorithm.hpp"
+#include "engine/live_data_store.hpp"
 #include "engine/api/match_parameters.hpp"
 #include "engine/api/nearest_parameters.hpp"
 #include "engine/api/route_parameters.hpp"
 #include "engine/api/table_parameters.hpp"
+#include "engine/api/traffic_parameters.hpp"
 #include "engine/api/trip_parameters.hpp"
 #include "engine/engine.hpp"
 #include "engine/engine_config.hpp"
@@ -56,6 +57,7 @@ OSRM::OSRM(engine::EngineConfig &config)
     }
 
     if (config.use_live_data) {
+        engine::LiveDataStore::instance().setStaleSeconds(config.live_data_stale_seconds);
         traffic_updater_ = std::make_unique<engine::TrafficUpdater>(
             config.live_data_udp_port,
             config.live_data_stale_seconds,
@@ -150,6 +152,19 @@ Status OSRM::Tile(const engine::api::TileParameters &params, std::string &str_re
 Status OSRM::Tile(const engine::api::TileParameters &params, engine::api::ResultT &result) const
 {
     return engine_->Tile(params, result);
+}
+
+Status OSRM::Traffic(const engine::api::TrafficParameters &params, json::Object &json_result) const
+{
+    osrm::engine::api::ResultT result = json::Object();
+    auto status = engine_->Traffic(params, result);
+    json_result = std::move(result.get<json::Object>());
+    return status;
+}
+
+Status OSRM::Traffic(const TrafficParameters &params, engine::api::ResultT &result) const
+{
+    return engine_->Traffic(params, result);
 }
 
 } // namespace osrm

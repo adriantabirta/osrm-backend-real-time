@@ -6,27 +6,36 @@ This document explains how to use the real-time live traffic data feature in OSR
 
 The system consists of three main components:
 
-1. **UDP Traffic Data Receiver** - OSRM receives traffic updates via UDP packets
-2. **Live Data Store** - In-memory cache of current traffic speeds per road segment
-3. **Dynamic Routing** - Routes avoid congested segments by increasing their cost
+1. **UDP Traffic Data Receiver** - OSRM receives GPS traffic updates via UDP packets
+2. **Live Data Store** - In-memory cache with average speeds per road segment
+3. **Dynamic Routing + Traffic API** - Routes avoid congested segments; Mapbox-ready colored polylines
 
 ## How It Works
 
 ### Traffic Data Flow
 
 ```
-GPS Trackers / Traffic Sensors
-         ↓ (UDP packets)
-   OSRM UDP Port 9000
+GPS Trackers / Mobile Apps
+         ↓ (UDP: user_id + lat/lon + speed)
+   OSRM UDP Port 9900
          ↓
   TrafficUpdater thread
          ↓
-  LiveDataStore (in-memory cache)
+  LiveDataStore (raw samples)
          ↓
-  LiveWeightedDataFacade (during routing)
+  Traffic Aggregator (snap GPS → road, avg speed per segment)
          ↓
-  Route requests get current speeds
+  Routing engine (segment weights adjusted from live traffic)
+         ↓
+  /traffic/v1 API (colored polylines for Mapbox)
 ```
+
+### Key Design
+
+- **Clients send only `user_id` + GPS data** — no `edge_id`
+- **OSRM resolves the road segment** via nearest-road snapping
+- **Average speed** is computed per road from all active users on that segment
+- **Colors** are assigned by speed for easy Mapbox visualization
 
 ### Speed to Weight Conversion
 
@@ -40,7 +49,15 @@ Examples:
 - Current speed 50 km/h → factor 1.0 (normal routing)
 - Current speed 25 km/h → factor 2.0 (twice as expensive/slow)
 - Current speed 5 km/h  → factor 10.0 (heavily congested, capped at 10x)
-- Current speed 1 km/h  → factor 10.0 (gridlock, max penalty)
+
+### Speed Colors (Mapbox)
+
+| Speed (km/h) | Color   | Meaning        |
+|--------------|---------|----------------|
+| ≥ 50         | #22c55e | Free flow      |
+| 30–49        | #eab308 | Moderate       |
+| 15–29        | #f97316 | Slow           |
+| < 15         | #ef4444 | Congested      |
 
 ## Configuration
 
@@ -49,15 +66,13 @@ Examples:
 ```cpp
 osrm::engine::EngineConfig config;
 config.storage_config = {"/path/to/data/files"};
-config.use_live_data = true;                    // Enable live data feature
-config.live_data_udp_port = 9000;               // Listen port (default)
-config.live_data_stale_seconds = 120;           // Remove data older than 2 min
-config.live_data_min_speed_kmh = 1.0;           // Minimum valid speed
+config.use_live_data = true;
+config.live_data_udp_port = 9900;
+config.live_data_stale_seconds = 120;
+config.live_data_min_speed_kmh = 1.0;
 ```
 
 ### Building with Live Data Support
-
-The project already has live data support compiled in. If rebuilding:
 
 ```bash
 cd build
@@ -67,13 +82,13 @@ make -j4
 
 ## UDP Packet Format
 
-Traffic data is sent as UDP packets with the following structure (40 bytes):
+Traffic data is sent as UDP packets (40 bytes):
 
 ```c
 struct TrafficPacket {
-    uint64_t edge_id;       // OSM way ID or OSRM edge ID (8 bytes)
+    uint64_t user_id;       // GPS device / user identifier (8 bytes)
     double   latitude;      // WGS84 latitude (8 bytes)
-    double   longitude;     // WGS84 longitude (8 bytes)  
+    double   longitude;     // WGS84 longitude (8 bytes)
     float    speed_kmh;     // Measured speed in km/h (4 bytes)
     float    bearing_deg;   // Direction 0-360, 0=North (4 bytes)
     int64_t  timestamp_ms;  // Unix timestamp in milliseconds (8 bytes)
@@ -84,218 +99,209 @@ struct TrafficPacket {
 ### UDP Packet Validation
 
 Packets are validated before use:
-- ✓ Speed must be 1-300 km/h
-- ✓ Latitude must be -90 to +90
-- ✓ Longitude must be -180 to +180
-- ✓ Data not older than `live_data_stale_seconds`
+- Speed must be 1-300 km/h
+- Latitude must be -90 to +90
+- Longitude must be -180 to +180
+- Data not older than `live_data_stale_seconds`
 
 ## Sending Traffic Data
 
 ### Using the Example Publisher
 
-A simple C++ UDP client is provided:
-
 ```bash
-# Compile
-g++ -std=c++17 -o live_traffic_publisher osrm-realtime/live_traffic_publisher.cpp
+# Build (or use ./scripts/build.sh)
+cmake --build build --target live_traffic_publisher
 
-# Send a single traffic packet
-# ./live_traffic_publisher <server_ip> <port> <edge_id> <lat> <lon> <speed_kmh> [bearing]
-./live_traffic_publisher localhost 9000 12345 52.5 13.4 25.5 90
+# Send traffic from user 42 at given coordinates
+# ./build/live_traffic_publisher <server_ip> <port> <user_id> <lat> <lon> <speed_kmh> [bearing]
+./build/live_traffic_publisher localhost 9900 42 47.01 28.86 25.5 90
 
-# Examples:
-./live_traffic_publisher localhost 9000 100 52.52 13.40 15  0   # Slow traffic
-./live_traffic_publisher localhost 9000 101 52.51 13.41 50  45  # Fast traffic
-./live_traffic_publisher localhost 9000 102 52.50 13.42 5   180 # Gridlock
+# Multiple users on the same road → OSRM computes average speed
+./build/live_traffic_publisher localhost 9900 42 47.02 28.87 15  0   # slow
+./build/live_traffic_publisher localhost 9900 43 47.02 28.87 45  0   # fast → avg ~30 km/h
 ```
 
-### From Other Languages
+### From Python
 
-#### Python
 ```python
 import socket
 import struct
 import time
 
-def send_traffic_data(host, port, edge_id, lat, lon, speed_kmh, bearing=0):
+def send_traffic_data(host, port, user_id, lat, lon, speed_kmh, bearing=0):
     packet = struct.pack(
-        '<QddffQ',  # unsigned long long, double, double, float, float, long long
-        edge_id,
+        '<QddffQ',
+        user_id,
         lat,
         lon,
         speed_kmh,
         bearing,
-        int(time.time() * 1000)  # current time in milliseconds
+        int(time.time() * 1000)
     )
-    
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.sendto(packet, (host, port))
     sock.close()
 
-# Send traffic data
-send_traffic_data('localhost', 9000, 12345, 52.5, 13.4, 25.5, 90)
+send_traffic_data('localhost', 9900, 42, 52.5, 13.4, 25.5, 90)
 ```
 
-#### Node.js
-```javascript
-const dgram = require('dgram');
-const client = dgram.createSocket('udp4');
+## Traffic API for Mapbox
 
-function sendTrafficData(host, port, edgeId, lat, lon, speedKmh, bearing = 0) {
-    const now = BigInt(Date.now());
-    const buffer = Buffer.alloc(40);
-    
-    buffer.writeBigUInt64LE(BigInt(edgeId), 0);  // 8 bytes
-    buffer.writeDoubleLE(lat, 8);                // 8 bytes
-    buffer.writeDoubleLE(lon, 16);               // 8 bytes
-    buffer.writeFloatLE(speedKmh, 24);           // 4 bytes
-    buffer.writeFloatLE(bearing, 28);            // 4 bytes
-    buffer.writeBigInt64LE(now, 32);             // 8 bytes
-    
-    client.send(buffer, port, host, (err) => {
-        if (err) console.error('Send error:', err);
-        else console.log('Traffic packet sent');
-    });
+Get road segments with speed, color, and polyline:
+
+```bash
+# All active traffic segments (polyline6, Mapbox default)
+curl "http://localhost:7070/traffic/v1/driving"
+
+# Filter by bounding box
+curl "http://localhost:7070/traffic/v1/driving?south=52.4&west=13.3&north=52.6&east=13.5"
+
+# GeoJSON LineString geometry instead of polyline
+curl "http://localhost:7070/traffic/v1/driving?geometries=geojson"
+```
+
+### Response Example
+
+```json
+{
+  "code": "Ok",
+  "segments": [
+    {
+      "geometry_id": 12345,
+      "speed_kmh": 25.5,
+      "avg_speed_kmh": 25.5,
+      "sample_count": 3,
+      "weight_factor": 1.96,
+      "color": "#f97316",
+      "timestamp_ms": 1719148800000,
+      "polyline": "encoded_polyline6_string..."
+    }
+  ]
 }
-
-sendTrafficData('localhost', 9000, 12345, 52.5, 13.4, 25.5, 90);
 ```
 
-## GPS to Edge ID Mapping
+### Mapbox GL JS Example
 
-To use live traffic data effectively, you need to map GPS points to road segment IDs. Options:
+```javascript
+const response = await fetch('http://localhost:7070/traffic/v1/driving?geometries=geojson');
+const data = await response.json();
 
-### 1. Use OSRM's Map-Matching Service
+const features = data.segments.map(seg => ({
+  type: 'Feature',
+  properties: {
+    speed: seg.speed_kmh,
+    color: seg.color
+  },
+  geometry: seg.geometry
+}));
 
-OSRM can snap GPS traces to the road network:
+map.addSource('live-traffic', {
+  type: 'geojson',
+  data: { type: 'FeatureCollection', features }
+});
 
-```bash
-# Map-match GPS trace to find matching edges
-curl -X POST "http://localhost:5000/match/v1/driving/13.4,52.5;13.401,52.501?steps=true&annotations=true"
+map.addLayer({
+  id: 'live-traffic-lines',
+  type: 'line',
+  source: 'live-traffic',
+  paint: {
+    'line-color': ['get', 'color'],
+    'line-width': 5
+  }
+});
 ```
-
-The response includes edge indices that can be converted to edge IDs.
-
-### 2. Use Nearest Endpoint
-
-Snap individual points to the nearest road:
-
-```bash
-curl "http://localhost:5000/nearest/v1/driving/13.4,52.5?steps=true"
-```
-
-### 3. Pre-process with External Tools
-
-- **Vroom**: Vector tile routing engine
-- **OSRM Compile Data**: Extract edge IDs from compiled data
-- **Custom Scripts**: Build lookup tables mapping coordinates to edge IDs
 
 ## Testing
 
-### 1. Start OSRM Server with Live Data Enabled
+### Unit tests (no server required)
 
 ```bash
-# First, prepare OSRM data (if not already done)
-./osrm-extract berlin-latest.osm.pbf
-./osrm-contract berlin-latest.osrm
+./scripts/test-unit.sh
+# sau totul dintr-o dată:
+./scripts/run-all-tests.sh
+```
 
-# Start server with live data enabled
-./osrm-routed berlin-latest.osrm &
+Includes packet format, store logic, weight/color mapping, and **concurrency** tests (parallel readers/writers + UDP burst load).
+
+### Performance / concurrency stress test
+
+Requires a running `osrm-routed` with `--enable-live-data` and valid `.osrm` data:
+
+```bash
+./scripts/start-osrm-server.sh
+
+# Default: 15s, max 100 UDP pkt/s, 8 concurrent route workers
+./scripts/test-stress.sh
+```
+
+Tune via environment variables:
+
+```bash
+DURATION_SEC=60 MAX_UDP_RATE=100 ROUTE_WORKERS=12 ./scripts/test-stress.sh
+```
+
+The stress test sends random UDP packets (`user_id`, coords, bearing, speed) while concurrently calling `/route/v1` and `/traffic/v1`.
+
+### Manual testing
+
+```bash
+./osrm-routed map.osrm --enable-live-data --live-data-udp-port 9900
 ```
 
 ### 2. Send Test Traffic Data
 
 ```bash
-# Terminal 1: Start server
-./osrm-routed sample.osrm
-
-# Terminal 2: Send traffic updates  
-./live_traffic_publisher localhost 9000 12345 52.5 13.4 20 0  # Slow
-sleep 2
-./live_traffic_publisher localhost 9000 12345 52.5 13.4 50 0  # Fast
-
-# Terminal 3: Query routes
-curl "http://localhost:5000/route/v1/driving/52.5,13.4;52.51,13.41"
-
-# The route should change based on traffic updates
+./live_traffic_publisher localhost 9900 42 52.5 13.4 20 0
+./live_traffic_publisher localhost 9900 43 52.5 13.4 40 0
 ```
 
-### 3. Monitor Traffic Data
+### 3. Query Traffic Segments
 
 ```bash
-# Check live data cache size (requires logging enabled)
-# Look for: "LiveDataStore::instance().size()" in logs
+curl "http://localhost:7070/traffic/v1/driving"
+```
 
-# Expected flow:
-# 1. UDP packet received
-# 2. Data validated and added to cache
-# 3. On next routing request, facade reads cache
-# 4. Weights adjusted based on current speed
-# 5. Router finds path using adjusted weights
+### 4. Query Routes (uses live weights)
+
+```bash
+curl "http://localhost:7070/route/v1/driving/52.5,13.4;52.51,13.41"
 ```
 
 ## Performance Considerations
 
 ### Memory Usage
-- Each cached entry: ~40 bytes + overhead
-- 100,000 segments: ~5 MB
-- 1,000,000 segments: ~50 MB
+- Each cached segment: ~80 bytes + overhead
+- Raw samples are processed and aggregated quickly
 
 ### CPU Impact
-- Weight caching reduces recalculation
-- Shared mutex for thread-safe access
-- Minimal overhead per route request
+- Aggregation runs when new samples arrive (before routing/traffic queries)
+- Weight caching reduces recalculation during routing
 
 ### Stale Data Handling
-- Data older than `live_data_stale_seconds` is automatically removed
-- Default: 120 seconds (2 minutes)
-- Can be configured per EngineConfig
+- Data older than `live_data_stale_seconds` is automatically removed (default: 120s)
 
 ## Troubleshooting
 
 ### Traffic Data Not Being Applied
 
-1. **Check UDP packets are received**
-   - Monitor with: `tcpdump -i lo -n "udp port 9000"` (on Linux)
-   - Verify source IP and port
+1. Verify `--enable-live-data` is set
+2. Check UDP packets: `tcpdump -i lo -n "udp port 9900"`
+3. Ensure coordinates are on the road network (use `/nearest` to verify)
+4. Check timestamps are synchronized
 
-2. **Verify Edge IDs**
-   - Edge IDs must match the compiled OSRM data
-   - Use `/nearest` endpoint to verify edge IDs for your coordinates
+### Empty /traffic Response
 
-3. **Check Data Staleness**
-   - Ensure client systems have synchronized time
-   - Data older than `live_data_stale_seconds` is ignored
+1. Send UDP packets first, then query `/traffic/v1/driving`
+2. Coordinates must snap to a valid road segment
+3. Wait for aggregation (happens automatically on next request)
 
-4. **Enable Debug Logging**
-   - OSRM logs show traffic packet reception
-   - Check for validation errors
+### Routes Not Changing
 
-### Unexpected Route Changes
-
-1. **Weight Factor Sensitivity**
-   - Reference speed of 50 km/h may not match your data
-   - Adjust in `live_weighted_facade.hpp` if needed
-
-2. **Capping at 10x**
-   - Very slow speeds are capped at 10x weight factor
-   - Edit `live_weighted_facade.hpp` to adjust cap
-
-3. **Check Cache**
-   - Old data expires after `live_data_stale_seconds`
-   - Send periodic updates to keep data fresh
-
-## Future Enhancements
-
-1. **Average Speed Aggregation** - Combine multiple GPS points per edge
-2. **Confidence Scores** - Weight data by source reliability  
-3. **Time-Based Profiles** - Different speeds for different times of day
-4. **Turn Penalties** - Apply live data to turn restrictions too
-5. **Persistent Storage** - Save historical traffic patterns
-6. **Real-time API** - WebSocket updates instead of polling
+1. Congestion must exist on alternative routes
+2. Verify `sample_count` > 0 in traffic API response
+3. Check OSRM logs for TrafficUpdater startup message
 
 ## References
 
 - OSRM Documentation: https://project-osrm.org/
-- GitHub: https://github.com/Project-OSRM/osrm-backend
-- Live Traffic Data Discussion: (See GitHub issues #3852, #4200)
+- Mapbox Polyline6: https://github.com/mapbox/polyline

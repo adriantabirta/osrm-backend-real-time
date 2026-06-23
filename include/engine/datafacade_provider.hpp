@@ -31,7 +31,7 @@ template <typename AlgorithmT, template <typename A> class FacadeT> class DataFa
   public:
     using Facade = FacadeT<AlgorithmT>;
 
-    virtual ~DataFacadeProvider() = default;
+    virtual ~DataFacadeProvider() override = default;
 
     virtual std::shared_ptr<const Facade> Get(const api::BaseParameters &) const = 0;
     virtual std::shared_ptr<const Facade> Get(const api::TileParameters &) const = 0;

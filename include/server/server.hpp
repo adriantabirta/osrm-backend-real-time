@@ -10,6 +10,7 @@
 
 #include <boost/asio.hpp>
 #include <boost/bind.hpp>
+#include <boost/version.hpp>
 
 #include <zlib.h>
 
@@ -53,8 +54,13 @@ class Server
         const auto port_string = std::to_string(port);
 
         boost::asio::ip::tcp::resolver resolver(io_context);
+#if BOOST_VERSION >= 106600
+        boost::asio::ip::tcp::endpoint endpoint =
+            *resolver.resolve(address, port_string).begin();
+#else
         boost::asio::ip::tcp::resolver::query query(address, port_string);
-        boost::asio::ip::tcp::endpoint endpoint = *resolver.resolve(query);
+        boost::asio::ip::tcp::endpoint endpoint = *resolver.resolve(query).begin();
+#endif
 
         acceptor.open(endpoint.protocol());
 #ifdef SO_REUSEPORT

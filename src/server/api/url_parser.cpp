@@ -35,7 +35,7 @@ struct URLParser final : qi::grammar<Iterator, Into>
         service = +identifier;
         version = qi::uint_;
         profile = +identifier;
-        query = +all_chars;
+        query = *all_chars;
 
         // Example input: /route/v1/driving/7.416351,43.731205;7.420363,43.736189
 

@@ -1,0 +1,4 @@
+# Large map files — run scripts/prepare-moldova-data.sh to generate
+*.osm.pbf
+*.osrm*
+!moldova.bounds

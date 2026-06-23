@@ -6,14 +6,15 @@
 #include "engine/api/route_parameters.hpp"
 #include "engine/api/table_parameters.hpp"
 #include "engine/api/tile_parameters.hpp"
+#include "engine/api/traffic_parameters.hpp"
 #include "engine/api/trip_parameters.hpp"
 #include "engine/datafacade_provider.hpp"
-#include "engine/datafacade/live_weighted_facade.hpp"
 #include "engine/engine_config.hpp"
 #include "engine/plugins/match.hpp"
 #include "engine/plugins/nearest.hpp"
 #include "engine/plugins/table.hpp"
 #include "engine/plugins/tile.hpp"
+#include "engine/plugins/traffic.hpp"
 #include "engine/plugins/trip.hpp"
 #include "engine/plugins/viaroute.hpp"
 #include "engine/routing_algorithms.hpp"
@@ -38,6 +39,7 @@ class EngineInterface
     virtual Status Trip(const api::TripParameters &parameters, api::ResultT &result) const = 0;
     virtual Status Match(const api::MatchParameters &parameters, api::ResultT &result) const = 0;
     virtual Status Tile(const api::TileParameters &parameters, api::ResultT &result) const = 0;
+    virtual Status Traffic(const api::TrafficParameters &parameters, api::ResultT &result) const = 0;
 };
 
 template <typename Algorithm> class Engine final : public EngineInterface
@@ -53,37 +55,18 @@ template <typename Algorithm> class Engine final : public EngineInterface
           match_plugin(config.max_locations_map_matching,
                        config.max_radius_map_matching,
                        config.default_radius), //
-          tile_plugin()                        //
+          tile_plugin(),                        //
+          traffic_plugin(config.use_live_data)    //
 
     {
-        if (config.use_live_data)
+        if (config.use_live_data && config.use_shared_memory)
         {
-            if (config.use_shared_memory)
-            {
-                util::Log(logWARNING)
-                    << "use_live_data is enabled; shared memory is not supported for live updates. "
-                       "Falling back to live-weighted internal/mmap facade.";
-            }
-
-            if (!config.memory_file.empty() || config.use_mmap)
-            {
-                if (!config.memory_file.empty())
-                {
-                    util::Log(logWARNING)
-                        << "The 'memory_file' option is DEPRECATED - using direct mmaping instead";
-                }
-                util::Log(logDEBUG) << "Using direct memory mapping with live weighted data and algorithm "
-                                    << routing_algorithms::name<Algorithm>();
-                facade_provider = std::make_unique<ExternalProvider<Algorithm>>(config.storage_config);
-            }
-            else
-            {
-                util::Log(logDEBUG) << "Using internal memory with live weighted data and algorithm "
-                                    << routing_algorithms::name<Algorithm>();
-                facade_provider = std::make_unique<ImmutableProvider<Algorithm>>(config.storage_config);
-            }
+            util::Log(logWARNING)
+                << "use_live_data is enabled; shared memory is not supported for live updates. "
+                   "Falling back to internal/mmap facade.";
         }
-        else if (config.use_shared_memory)
+
+        if (config.use_shared_memory)
         {
             util::Log(logDEBUG) << "Using shared memory with name \"" << config.dataset_name
                                 << "\" with algorithm " << routing_algorithms::name<Algorithm>();
@@ -105,6 +88,12 @@ template <typename Algorithm> class Engine final : public EngineInterface
             util::Log(logDEBUG) << "Using internal memory with algorithm "
                                 << routing_algorithms::name<Algorithm>();
             facade_provider = std::make_unique<ImmutableProvider<Algorithm>>(config.storage_config);
+        }
+
+        if (config.use_live_data)
+        {
+            util::Log(logDEBUG) << "Live traffic overlay enabled for algorithm "
+                                << routing_algorithms::name<Algorithm>();
         }
     }
 
@@ -145,11 +134,17 @@ template <typename Algorithm> class Engine final : public EngineInterface
         return tile_plugin.HandleRequest(GetAlgorithms(params), params, result);
     }
 
+    Status Traffic(const api::TrafficParameters &params, api::ResultT &result) const override final
+    {
+        return traffic_plugin.HandleRequest(GetAlgorithms(params), params, result);
+    }
+
   private:
     template <typename ParametersT> auto GetAlgorithms(const ParametersT &params) const
     {
         return RoutingAlgorithms<Algorithm>{heaps, facade_provider->Get(params)};
     }
+
     std::unique_ptr<DataFacadeProvider<Algorithm>> facade_provider;
     mutable SearchEngineData<Algorithm> heaps;
 
@@ -159,6 +154,7 @@ template <typename Algorithm> class Engine final : public EngineInterface
     const plugins::TripPlugin trip_plugin;
     const plugins::MatchPlugin match_plugin;
     const plugins::TilePlugin tile_plugin;
+    const plugins::TrafficPlugin traffic_plugin;
 };
 } // namespace osrm::engine
 

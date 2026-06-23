@@ -102,7 +102,7 @@ struct EngineConfig final
     bool use_live_data = false;
 
     // Portul UDP pe care TrafficUpdater ascultă pachete GPS/traffic
-    uint16_t live_data_udp_port = 9000;
+    uint16_t live_data_udp_port = 9900;
 
     // Câte secunde un edge fără update e considerat "stale" și ignorat
     int live_data_stale_seconds = 120;

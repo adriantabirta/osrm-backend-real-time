@@ -60,9 +60,16 @@ class Connection : public std::enable_shared_from_this<Connection>
     std::vector<char> compress_buffers(const std::vector<char> &uncompressed_data,
                                        const http::compression_type compression_type);
 
+    std::shared_ptr<Connection> self() { return shared_from_this(); }
+    std::shared_ptr<const Connection> self() const { return shared_from_this(); }
+
     boost::asio::strand<boost::asio::io_context::executor_type> strand;
     boost::asio::ip::tcp::socket TCP_socket;
+#if BOOST_VERSION >= 107000
+    boost::asio::steady_timer timer;
+#else
     boost::asio::deadline_timer timer;
+#endif
     RequestHandler &request_handler;
     RequestParser request_parser;
     boost::array<char, 8192> incoming_data_buffer;

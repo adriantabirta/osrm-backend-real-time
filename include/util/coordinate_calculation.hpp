@@ -202,7 +202,7 @@ findClosestDistance(const Coordinate coordinate, const iterator_type begin, cons
         return false;
     };
 
-    std::adjacent_find(begin, end, compute_minimum_distance);
+    (void)std::adjacent_find(begin, end, compute_minimum_distance);
     return current_min;
 }
 

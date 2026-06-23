@@ -1,59 +1,129 @@
 // include/engine/live_data_store.hpp
 #pragma once
-#include <shared_mutex>
-#include <unordered_map>
-#include <optional>
-#include <cstdint>
-#include <string>
+
 #include <chrono>
-#include <mutex>
+#include <cstdint>
+#include <optional>
+#include <shared_mutex>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 namespace osrm::engine {
 
+struct TrafficSample {
+    uint64_t user_id = 0;
+    double latitude = 0.0;
+    double longitude = 0.0;
+    float speed_kmh = 0.0f;
+    float bearing_deg = 0.0f;
+    int64_t timestamp_ms = 0;
+};
+
 struct TrafficEdgeData {
-    double   speed_kmh     = 0.0;
-    double   weight_factor = 1.0;
-    double   bearing_deg   = 0.0;   // din pachetul UDP
-    double   latitude      = 0.0;   // coordonata ultimei măsurători
-    double   longitude     = 0.0;
-    int64_t  timestamp_ms  = 0;     // când a fost primit pachetul
-    std::string source     = "static"; // "live" | "static"
+    double speed_kmh = 0.0;
+    double weight_factor = 1.0;
+    double bearing_deg = 0.0;
+    double latitude = 0.0;
+    double longitude = 0.0;
+    int64_t timestamp_ms = 0;
+    uint32_t sample_count = 0;
+    std::string source = "static";
 };
 
 class LiveDataStore {
-public:
-    static LiveDataStore& instance() {
+  public:
+    static LiveDataStore &instance()
+    {
         static LiveDataStore inst;
         return inst;
     }
 
-    void update(uint64_t edge_id, TrafficEdgeData data) {
+    void addSample(TrafficSample sample)
+    {
         std::unique_lock lock(mutex_);
-        edges_[edge_id] = std::move(data);
+        pending_samples_.push_back(std::move(sample));
     }
 
-    std::optional<TrafficEdgeData> get(uint64_t edge_id) const {
+    std::vector<TrafficSample> takePendingSamples()
+    {
+        std::unique_lock lock(mutex_);
+        return std::exchange(pending_samples_, {});
+    }
+
+    void update(uint64_t geometry_id, TrafficEdgeData data)
+    {
+        std::unique_lock lock(mutex_);
+        segments_[geometry_id] = std::move(data);
+    }
+
+    std::optional<TrafficEdgeData> get(uint64_t geometry_id) const
+    {
         std::shared_lock lock(mutex_);
-        auto it = edges_.find(edge_id);
-        if (it != edges_.end()) return it->second;
+        auto it = segments_.find(geometry_id);
+        if (it != segments_.end())
+            return it->second;
         return std::nullopt;
     }
 
-    // Numărul de edge-uri cu date live în memorie
-    size_t size() const {
+    std::vector<std::pair<uint64_t, TrafficEdgeData>> getAllSegments() const
+    {
         std::shared_lock lock(mutex_);
-        return edges_.size();
+        std::vector<std::pair<uint64_t, TrafficEdgeData>> result;
+        result.reserve(segments_.size());
+        for (const auto &[geometry_id, data] : segments_)
+            result.emplace_back(geometry_id, data);
+        return result;
     }
 
-    void clear() {
+    void removeStaleSegments(int stale_seconds)
+    {
+        const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::system_clock::now().time_since_epoch())
+                                .count();
+        const auto max_age_ms = static_cast<int64_t>(stale_seconds) * 1000;
+
         std::unique_lock lock(mutex_);
-        edges_.clear();
+        for (auto it = segments_.begin(); it != segments_.end();)
+        {
+            if (now_ms - it->second.timestamp_ms > max_age_ms)
+                it = segments_.erase(it);
+            else
+                ++it;
+        }
     }
 
-private:
+    size_t size() const
+    {
+        std::shared_lock lock(mutex_);
+        return segments_.size();
+    }
+
+    size_t pendingSampleCount() const
+    {
+        std::shared_lock lock(mutex_);
+        return pending_samples_.size();
+    }
+
+    void clear()
+    {
+        std::unique_lock lock(mutex_);
+        segments_.clear();
+        pending_samples_.clear();
+    }
+
+    void setStaleSeconds(int stale_seconds) { stale_seconds_ = stale_seconds; }
+
+    int staleSeconds() const { return stale_seconds_; }
+
+  private:
     LiveDataStore() = default;
+
     mutable std::shared_mutex mutex_;
-    std::unordered_map<uint64_t, TrafficEdgeData> edges_;
+    std::unordered_map<uint64_t, TrafficEdgeData> segments_;
+    std::vector<TrafficSample> pending_samples_;
+    int stale_seconds_ = 120;
 };
 
 } // namespace osrm::engine

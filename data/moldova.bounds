@@ -1,0 +1,6 @@
+# Moldova default test region (Chisinau area) — lon,lat for OSRM API
+ROUTE_A=28.8608,47.0105
+ROUTE_B=28.8750,47.0200
+UDP_LAT=47.0105
+UDP_LON=28.8608
+PROBE=28.8608,47.0105

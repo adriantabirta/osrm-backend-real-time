@@ -136,7 +136,7 @@ inline unsigned generateServerProgramOptions(const int argc,
          value<std::string>(&ip_address)->default_value("0.0.0.0"),
          "IP address") //
         ("port,p",
-         value<int>(&ip_port)->default_value(5000),
+         value<int>(&ip_port)->default_value(7070),
          "TCP/IP port") //
         ("threads,t",
          value<int>(&requested_thread_num)->default_value(hardware_threads),
@@ -192,7 +192,7 @@ inline unsigned generateServerProgramOptions(const int argc,
          boost::program_options::bool_switch(&config.use_live_data)->default_value(false),
          "Enable real-time traffic data via UDP") //
         ("live-data-udp-port",
-         value<uint16_t>(&config.live_data_udp_port)->default_value(9000),
+         value<uint16_t>(&config.live_data_udp_port)->default_value(9900),
          "UDP port for receiving live traffic data") //
         ("live-data-stale-seconds",
          value<int>(&config.live_data_stale_seconds)->default_value(120),

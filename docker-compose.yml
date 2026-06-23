@@ -1,0 +1,16 @@
+services:
+  osrm:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    ports:
+      - "7070:7070"
+      - "9900:9900/udp"
+    volumes:
+      - ./data:/data
+    environment:
+      OSRM_PORT: "7070"
+      LIVE_DATA_UDP_PORT: "9900"
+      LIVE_DATA_STALE_SECONDS: "120"
+      OSRM_ALGORITHM: "mld"
+    command: ["/data/moldova-latest.osrm"]

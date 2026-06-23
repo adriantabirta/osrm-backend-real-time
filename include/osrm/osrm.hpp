@@ -29,6 +29,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define OSRM_HPP
 
 #include "engine/api/base_result.hpp"
+#include "engine/api/traffic_parameters.hpp"
 #include "engine/traffic_updater.hpp"
 #include "osrm/osrm_fwd.hpp"
 #include "osrm/status.hpp"
@@ -45,6 +46,7 @@ using engine::api::NearestParameters;
 using engine::api::RouteParameters;
 using engine::api::TableParameters;
 using engine::api::TileParameters;
+using engine::api::TrafficParameters;
 using engine::api::TripParameters;
 
 /**
@@ -137,6 +139,12 @@ class OSRM final
      */
     Status Tile(const TileParameters &parameters, std::string &result) const;
     Status Tile(const TileParameters &parameters, engine::api::ResultT &result) const;
+
+    /**
+     * Traffic: live road segments with speed and colored polylines for Mapbox
+     */
+    Status Traffic(const TrafficParameters &parameters, json::Object &result) const;
+    Status Traffic(const TrafficParameters &parameters, engine::api::ResultT &result) const;
 
   private:
     std::unique_ptr<engine::EngineInterface> engine_;

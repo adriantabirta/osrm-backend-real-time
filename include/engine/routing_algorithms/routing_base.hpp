@@ -9,6 +9,7 @@
 #include "engine/internal_route_result.hpp"
 #include "engine/phantom_node.hpp"
 #include "engine/search_engine_data.hpp"
+#include "engine/traffic_aggregator.hpp"
 
 #include "util/coordinate_calculation.hpp"
 #include "util/typedefs.hpp"
@@ -184,6 +185,8 @@ void annotatePath(const FacadeT &facade,
     BOOST_ASSERT(endpoints.target_phantom.forward_segment_id.id == target_node_id ||
                  endpoints.target_phantom.reverse_segment_id.id == target_node_id);
 
+    AggregatePendingTrafficSamples(facade, LiveDataStore::instance().staleSeconds());
+
     // datastructures to hold extracted data from geometry
     std::vector<NodeID> id_vector;
     std::vector<SegmentWeight> weight_vector;
@@ -202,6 +205,7 @@ void annotatePath(const FacadeT &facade,
             copy(weight_vector, facade.GetUncompressedForwardWeights(geometry_index.id));
             copy(duration_vector, facade.GetUncompressedForwardDurations(geometry_index.id));
             copy(datasource_vector, facade.GetUncompressedForwardDatasources(geometry_index.id));
+            ApplyLiveTrafficToSegmentWeights(geometry_index.id, weight_vector);
         }
         else
         {
@@ -209,6 +213,7 @@ void annotatePath(const FacadeT &facade,
             copy(weight_vector, facade.GetUncompressedReverseWeights(geometry_index.id));
             copy(duration_vector, facade.GetUncompressedReverseDurations(geometry_index.id));
             copy(datasource_vector, facade.GetUncompressedReverseDatasources(geometry_index.id));
+            ApplyLiveTrafficToSegmentWeights(geometry_index.id, weight_vector);
         }
     };
 
