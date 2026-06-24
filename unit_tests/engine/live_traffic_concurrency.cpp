@@ -1,4 +1,5 @@
 #include "engine/live_data_store.hpp"
+#include "engine/traffic_protobuf.hpp"
 #include "engine/traffic_updater.hpp"
 
 #include <boost/test/unit_test.hpp>
@@ -44,20 +45,22 @@ uint16_t findFreeUdpPort()
     return ntohs(addr.sin_port);
 }
 
-void sendTrafficPacket(uint16_t port,
-                       uint64_t user_id,
-                       double lat,
-                       double lon,
-                       float speed_kmh,
-                       float bearing_deg)
+void sendTrafficBatch(uint16_t port,
+                      uint64_t user_id,
+                      double lat,
+                      double lon,
+                      float speed_kmh,
+                      float bearing_deg)
 {
-    TrafficPacket pkt{};
-    pkt.user_id = user_id;
-    pkt.latitude = lat;
-    pkt.longitude = lon;
-    pkt.speed_kmh = speed_kmh;
-    pkt.bearing_deg = bearing_deg;
-    pkt.timestamp_ms = nowMs();
+    traffic_proto::TrafficPacketMsg packet;
+    packet.user_id = user_id;
+    packet.latitude = lat;
+    packet.longitude = lon;
+    packet.speed_kmh = speed_kmh;
+    packet.bearing_deg = bearing_deg;
+    packet.timestamp_ms = nowMs();
+
+    const std::string wire = traffic_proto::encodeTrafficBatch(packet);
 
     const int fd = ::socket(AF_INET, SOCK_DGRAM, 0);
     BOOST_REQUIRE(fd >= 0);
@@ -68,13 +71,13 @@ void sendTrafficPacket(uint16_t port,
     ::inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
 
     const ssize_t bytes = ::sendto(fd,
-                                   &pkt,
-                                   sizeof(pkt),
+                                   wire.data(),
+                                   wire.size(),
                                    0,
                                    reinterpret_cast<sockaddr *>(&addr),
                                    sizeof(addr));
     ::close(fd);
-    BOOST_REQUIRE_EQUAL(bytes, static_cast<ssize_t>(sizeof(pkt)));
+    BOOST_REQUIRE_EQUAL(bytes, static_cast<ssize_t>(wire.size()));
 }
 
 } // namespace
@@ -206,7 +209,7 @@ BOOST_AUTO_TEST_CASE(traffic_updater_handles_burst_udp_load)
 
                 const uint64_t user_id = static_cast<uint64_t>(thread_id) * 10'000 +
                                          (packets_sent.load(std::memory_order_relaxed) % 500);
-                sendTrafficPacket(port,
+                sendTrafficBatch(port,
                                   user_id,
                                   52.5 + coord_jitter(rng),
                                   13.4 + coord_jitter(rng),

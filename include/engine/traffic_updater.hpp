@@ -2,38 +2,23 @@
 #pragma once
 
 #include "engine/live_data_store.hpp"
+#include "engine/traffic_protobuf.hpp"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
-#include <cstring>
 #include <stdexcept>
 #include <thread>
 
 namespace osrm::engine {
 
-// UDP packet layout from GPS clients.
-// edge_id is resolved server-side from lat/lon via map-matching.
-// Total: 8+8+8+4+4+8 = 40 bytes
-#pragma pack(push, 1)
-struct TrafficPacket {
-    uint64_t user_id;       // GPS device / user identifier
-    double latitude;        // WGS84
-    double longitude;       // WGS84
-    float speed_kmh;        // measured speed
-    float bearing_deg;      // direction 0-360 (0 = North)
-    int64_t timestamp_ms;   // Unix timestamp in milliseconds
-};
-#pragma pack(pop)
-
-static_assert(sizeof(TrafficPacket) == 40,
-              "TrafficPacket size mismatch — verify alignment with UDP source");
-
+// UDP payload: protobuf traffic.TrafficBatch (see proto/traffic.proto).
 class TrafficUpdater {
   public:
     explicit TrafficUpdater(uint16_t port = 9900,
@@ -72,6 +57,7 @@ class TrafficUpdater {
 
     uint64_t packetsReceived() const { return packets_received_.load(); }
     uint64_t packetsDropped() const { return packets_dropped_.load(); }
+    uint64_t batchesReceived() const { return batches_received_.load(); }
 
   private:
     int createSocket()
@@ -108,15 +94,15 @@ class TrafficUpdater {
 
     void receiveLoop()
     {
-        TrafficPacket pkt;
+        std::array<char, 65536> buffer{};
         sockaddr_in sender{};
         socklen_t sender_len = sizeof(sender);
 
         while (running_)
         {
             ssize_t bytes = ::recvfrom(sockfd_,
-                                       &pkt,
-                                       sizeof(pkt),
+                                       buffer.data(),
+                                       buffer.size(),
                                        0,
                                        reinterpret_cast<sockaddr *>(&sender),
                                        &sender_len);
@@ -124,18 +110,29 @@ class TrafficUpdater {
             if (bytes < 0)
                 continue;
 
-            if (bytes != sizeof(TrafficPacket))
+            if (bytes == 0)
             {
                 ++packets_dropped_;
                 continue;
             }
 
-            processPacket(pkt);
-            ++packets_received_;
+            const auto parsed = traffic_proto::parseTrafficBatch(
+                buffer.data(),
+                static_cast<std::size_t>(bytes),
+                [this](traffic_proto::TrafficPacketMsg &packet) { processPacket(packet); });
+
+            if (parsed == 0)
+            {
+                ++packets_dropped_;
+                continue;
+            }
+
+            ++batches_received_;
+            packets_received_.fetch_add(parsed, std::memory_order_relaxed);
         }
     }
 
-    void processPacket(const TrafficPacket &pkt)
+    void processPacket(const traffic_proto::TrafficPacketMsg &pkt)
     {
         if (pkt.speed_kmh < min_speed_kmh_ || pkt.speed_kmh > 300.0f)
             return;
@@ -145,7 +142,8 @@ class TrafficUpdater {
             return;
 
         const auto now_ms = currentTimeMs();
-        if (now_ms - pkt.timestamp_ms > static_cast<int64_t>(stale_seconds_) * 1000)
+        if (pkt.timestamp_ms > 0 &&
+            now_ms - pkt.timestamp_ms > static_cast<int64_t>(stale_seconds_) * 1000)
             return;
 
         TrafficSample sample;
@@ -154,7 +152,7 @@ class TrafficUpdater {
         sample.longitude = pkt.longitude;
         sample.speed_kmh = pkt.speed_kmh;
         sample.bearing_deg = pkt.bearing_deg;
-        sample.timestamp_ms = pkt.timestamp_ms;
+        sample.timestamp_ms = pkt.timestamp_ms > 0 ? pkt.timestamp_ms : now_ms;
 
         LiveDataStore::instance().addSample(std::move(sample));
     }
@@ -174,6 +172,7 @@ class TrafficUpdater {
 
     std::atomic<uint64_t> packets_received_{0};
     std::atomic<uint64_t> packets_dropped_{0};
+    std::atomic<uint64_t> batches_received_{0};
 };
 
 } // namespace osrm::engine

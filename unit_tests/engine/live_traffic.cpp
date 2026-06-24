@@ -1,11 +1,10 @@
 #include "engine/live_data_store.hpp"
 #include "engine/traffic_aggregator.hpp"
-#include "engine/traffic_updater.hpp"
+#include "engine/traffic_protobuf.hpp"
 
 #include <boost/test/unit_test.hpp>
 
 #include <chrono>
-#include <cstring>
 
 using namespace osrm::engine;
 
@@ -20,28 +19,28 @@ int64_t nowMs()
 
 BOOST_AUTO_TEST_SUITE(live_traffic)
 
-BOOST_AUTO_TEST_CASE(traffic_packet_layout_matches_udp_wire_format)
+BOOST_AUTO_TEST_CASE(traffic_batch_protobuf_roundtrip)
 {
-    BOOST_CHECK_EQUAL(sizeof(TrafficPacket), 40u);
+    traffic_proto::TrafficPacketMsg packet;
+    packet.user_id = 42;
+    packet.latitude = 52.5;
+    packet.longitude = 13.4;
+    packet.speed_kmh = 33.3f;
+    packet.bearing_deg = 90.0f;
+    packet.timestamp_ms = 1'700'000'000'000;
 
-    TrafficPacket pkt{};
-    pkt.user_id = 42;
-    pkt.latitude = 52.5;
-    pkt.longitude = 13.4;
-    pkt.speed_kmh = 33.3f;
-    pkt.bearing_deg = 90.0f;
-    pkt.timestamp_ms = 1'700'000'000'000;
+    const auto wire = traffic_proto::encodeTrafficBatch(packet);
+    BOOST_CHECK(!wire.empty());
 
-    unsigned char buffer[40];
-    std::memcpy(buffer, &pkt, sizeof(pkt));
-
-    uint64_t user_id = 0;
-    std::memcpy(&user_id, buffer, sizeof(user_id));
-    BOOST_CHECK_EQUAL(user_id, 42u);
-
-    double latitude = 0.0;
-    std::memcpy(&latitude, buffer + 8, sizeof(latitude));
-    BOOST_CHECK_CLOSE(latitude, 52.5, 0.001);
+    std::size_t count = 0;
+    traffic_proto::parseTrafficBatch(wire.data(), wire.size(), [&](traffic_proto::TrafficPacketMsg &decoded) {
+        BOOST_CHECK_EQUAL(decoded.user_id, 42u);
+        BOOST_CHECK_CLOSE(decoded.latitude, 52.5, 0.001);
+        BOOST_CHECK_CLOSE(decoded.longitude, 13.4, 0.001);
+        BOOST_CHECK_CLOSE(decoded.speed_kmh, 33.3f, 0.001f);
+        ++count;
+    });
+    BOOST_CHECK_EQUAL(count, 1u);
 }
 
 BOOST_AUTO_TEST_CASE(live_data_store_keeps_pending_samples_and_segments)

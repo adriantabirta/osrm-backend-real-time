@@ -8,6 +8,7 @@ sudo apt-get install -y --no-install-recommends \
   build-essential \
   ca-certificates \
   cmake \
+  curl \
   git \
   pkg-config \
   libbz2-dev \

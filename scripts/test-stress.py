@@ -67,10 +67,36 @@ class StressStats:
         )
 
 
-def pack_traffic_packet(
+def encode_varint(n: int) -> bytes:
+    if n < 0:
+        n &= (1 << 64) - 1
+    out = bytearray()
+    while n > 0x7F:
+        out.append((n & 0x7F) | 0x80)
+        n >>= 7
+    out.append(n)
+    return bytes(out)
+
+
+def encode_key(field: int, wire_type: int) -> bytes:
+    return encode_varint((field << 3) | wire_type)
+
+
+def encode_traffic_batch(
     user_id: int, lat: float, lon: float, speed_kmh: float, bearing_deg: float, timestamp_ms: int
 ) -> bytes:
-    return struct.pack("<QddffQ", user_id, lat, lon, speed_kmh, bearing_deg, timestamp_ms)
+    """Protobuf traffic.TrafficBatch with a single TrafficPacket."""
+    body = b"".join(
+        [
+            encode_key(1, 0) + encode_varint(user_id),
+            encode_key(2, 1) + struct.pack("<d", lat),
+            encode_key(3, 1) + struct.pack("<d", lon),
+            encode_key(4, 5) + struct.pack("<f", speed_kmh),
+            encode_key(5, 5) + struct.pack("<f", bearing_deg),
+            encode_key(6, 0) + encode_varint(timestamp_ms),
+        ]
+    )
+    return encode_key(1, 2) + encode_varint(len(body)) + body
 
 
 def parse_route_coords(raw: str) -> Tuple[str, str]:
@@ -118,7 +144,7 @@ def udp_sender(
             speed = rng.uniform(1.0, 130.0)
             bearing = rng.uniform(0.0, 359.0)
             ts = int(time.time() * 1000)
-            packet = pack_traffic_packet(user_id, lat, lon, speed, bearing, ts)
+            packet = encode_traffic_batch(user_id, lat, lon, speed, bearing, ts)
 
             try:
                 sock.sendto(packet, (host, port))

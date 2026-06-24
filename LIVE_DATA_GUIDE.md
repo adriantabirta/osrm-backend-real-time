@@ -80,29 +80,33 @@ cmake ..
 make -j4
 ```
 
-## UDP Packet Format
+## UDP Payload (Protobuf)
 
-Traffic data is sent as UDP packets (40 bytes):
+Clients send **`traffic.TrafficBatch`** over UDP (port **9900** by default). Schema: [`proto/traffic.proto`](proto/traffic.proto).
 
-```c
-struct TrafficPacket {
-    uint64_t user_id;       // GPS device / user identifier (8 bytes)
-    double   latitude;      // WGS84 latitude (8 bytes)
-    double   longitude;     // WGS84 longitude (8 bytes)
-    float    speed_kmh;     // Measured speed in km/h (4 bytes)
-    float    bearing_deg;   // Direction 0-360, 0=North (4 bytes)
-    int64_t  timestamp_ms;  // Unix timestamp in milliseconds (8 bytes)
-};
-// Total: 40 bytes
+```protobuf
+message TrafficPacket {
+  uint64 user_id = 1;
+  double latitude = 2;
+  double longitude = 3;
+  float speed_kmh = 4;
+  float bearing_deg = 5;
+  int64 timestamp_ms = 6;
+}
+
+message TrafficBatch {
+  repeated TrafficPacket packets = 1;
+}
 ```
 
-### UDP Packet Validation
+Swift clients can generate types from the same `.proto` (`swift_prefix` supported). The server decodes with **protozero** (no `libprotobuf` runtime dependency).
 
-Packets are validated before use:
-- Speed must be 1-300 km/h
-- Latitude must be -90 to +90
-- Longitude must be -180 to +180
-- Data not older than `live_data_stale_seconds`
+### Validation
+
+Each packet in a batch is validated before use:
+- Speed must be 1–300 km/h
+- Latitude −90…+90, longitude −180…+180
+- `timestamp_ms` optional; if set, must be within `live_data_stale_seconds`
 
 ## Sending Traffic Data
 
@@ -240,7 +244,7 @@ Tune via environment variables:
 DURATION_SEC=60 MAX_UDP_RATE=100 ROUTE_WORKERS=12 ./scripts/test-stress.sh
 ```
 
-The stress test sends random UDP packets (`user_id`, coords, bearing, speed) while concurrently calling `/route/v1` and `/traffic/v1`.
+The stress test sends random **TrafficBatch** UDP messages while concurrently calling `/route/v1` and `/traffic/v1`.
 
 ### Manual testing
 

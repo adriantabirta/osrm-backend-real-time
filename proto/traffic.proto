@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package traffic;
+
+option swift_prefix = "";
+
+message TrafficPacket {
+  uint64 user_id = 1;
+  double latitude = 2;
+  double longitude = 3;
+  float speed_kmh = 4;
+  float bearing_deg = 5;
+  int64 timestamp_ms = 6;
+}
+
+message TrafficBatch {
+  repeated TrafficPacket packets = 1;
+}

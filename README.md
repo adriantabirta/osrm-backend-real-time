@@ -47,7 +47,9 @@ docker compose up --build
 # HTTP: localhost:7070  UDP: localhost:9900
 ```
 
-## UDP publisher
+## UDP (Protobuf TrafficBatch)
+
+Schema: [`proto/traffic.proto`](proto/traffic.proto)
 
 ```bash
 ./build/live_traffic_publisher localhost 9900 42 47.01 28.86 90 45
