@@ -444,10 +444,8 @@ else()
   find_package(BZip2 REQUIRED)
   add_dependency_includes(${BZIP2_INCLUDE_DIR})
 
-  find_package(Lua 5.2 QUIET)
-  if(NOT LUA_FOUND)
-    find_package(Lua 5.4 REQUIRED)
-  endif()
+  find_package(Lua 5.4 REQUIRED)
+
   if (LUA_FOUND)
     message(STATUS "Using Lua ${LUA_VERSION_STRING}")
   endif()
