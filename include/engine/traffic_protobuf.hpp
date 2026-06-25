@@ -8,6 +8,7 @@
 #include <functional>
 #include <string>
 #include <vector>
+#include "../util/log.hpp"
 
 namespace osrm::engine::traffic_proto
 {
@@ -96,12 +97,14 @@ inline std::size_t parseTrafficBatch(const char *data,
 
             consumer(packet);
             ++parsed;
-            fprintf(stderr, "[PROTO] packet parsed: user_id=%llu speed=%.1f\n", (unsigned long long)packet.user_id, packet.speed_kmh);
+            // printf(stderr, "[PROTO] packet parsed: user_id=%llu speed=%.1f\n", (unsigned long long)packet.user_id, packet.speed_kmh);
+            util::Log(logINFO) << "[PROTO] packet: user_id=" << packet.user_id << " speed=" << packet.speed_kmh;
         }
     }
     catch (const protozero::exception &e)
     {
-        fprintf(stderr, "[PROTO] parse error: %s (size=%zu)\n", e.what(), size);
+        // fprintf(stderr, "[PROTO] parse error: %s (size=%zu)\n", e.what(), size);
+        util::Log(logINFO) << "[PROTO] parse error: " << e.what() << " size=" << size;
         return 0;
     }
 

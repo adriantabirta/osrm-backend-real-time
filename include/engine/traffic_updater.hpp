@@ -8,6 +8,7 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include "../util/log.hpp"
 
 #include <array>
 #include <atomic>
@@ -117,13 +118,16 @@ class TrafficUpdater {
             }
 
             if (bytes > 0) {
-                fprintf(stderr, "[UDP] got %zd bytes from %s:%d\n", bytes, inet_ntoa(sender.sin_addr), ntohs(sender.sin_port));
+                // fprintf(stderr, "[UDP] got %zd bytes from %s:%d\n", bytes, inet_ntoa(sender.sin_addr), ntohs(sender.sin_port));
+                util::Log(logINFO) << "[UDP] got " << bytes << " bytes from " << inet_ntoa(sender.sin_addr) << ":" << ntohs(sender.sin_port);
             }
 
             const auto parsed = traffic_proto::parseTrafficBatch(
                 buffer.data(),
                 static_cast<std::size_t>(bytes),
                 [this](traffic_proto::TrafficPacketMsg &packet) { processPacket(packet); });
+
+            util::Log(logINFO) << "[UDP] parsed=" << parsed << " dropped=" << packets_dropped_.load();
 
             if (parsed == 0)
             {
