@@ -96,10 +96,12 @@ inline std::size_t parseTrafficBatch(const char *data,
 
             consumer(packet);
             ++parsed;
+            fprintf(stderr, "[PROTO] packet parsed: user_id=%llu speed=%.1f\n", (unsigned long long)packet.user_id, packet.speed_kmh);
         }
     }
-    catch (const protozero::exception &)
+    catch (const protozero::exception &e)
     {
+        fprintf(stderr, "[PROTO] parse error: %s (size=%zu)\n", e.what(), size);
         return 0;
     }
 

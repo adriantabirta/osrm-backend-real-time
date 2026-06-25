@@ -116,6 +116,10 @@ class TrafficUpdater {
                 continue;
             }
 
+            if (bytes > 0) {
+                fprintf(stderr, "[UDP] got %zd bytes from %s:%d\n", bytes, inet_ntoa(sender.sin_addr), ntohs(sender.sin_port));
+            }
+
             const auto parsed = traffic_proto::parseTrafficBatch(
                 buffer.data(),
                 static_cast<std::size_t>(bytes),
